@@ -53,7 +53,7 @@ def main():
         "test": tts["test"],
     })
 
-    # 4) Save to disk in 🤗 Datasets format
+    # 4) Save to disk in Datasets format
     name_dataset = args.source.split("/")[-1]
     out_dir = os.path.join(FOLDER_PROCESSED, name_dataset)
     final.save_to_disk(out_dir)
