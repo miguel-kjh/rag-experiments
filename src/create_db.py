@@ -2,6 +2,7 @@ import argparse
 import os
 from datasets import load_from_disk
 from langchain_core.documents import Document
+from datasets import concatenate_datasets, DatasetDict
 
 from embeddings_models import SentenceTransformerEmbeddings
 from ingestion import Ingestion
@@ -19,7 +20,6 @@ def main():
     
     # si hay varias particiones, las concatenamos
     if len(dataset.keys()) > 1:
-        from datasets import concatenate_datasets, DatasetDict
         dataset = concatenate_datasets(list(dataset.values()))
         dataset = DatasetDict({"train": dataset})  # lo guardamos como train    
 
