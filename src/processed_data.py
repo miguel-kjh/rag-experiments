@@ -26,7 +26,6 @@ def transform(example):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, help="Path to local dataset (load_from_disk) or Hub dataset ID (load_dataset)")
-    parser.add_argument("--from-disk", action="store_true", help="Use load_from_disk if source is a local Arrow dataset folder")
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--test-size", type=float, default=0.1)
     parser.add_argument("--val-size", type=float, default=0.1)
@@ -34,7 +33,7 @@ def main():
     args = parser.parse_args()
 
     # 1) Load dataset
-    ds = load_from_disk(args.source) if args.from_disk else load_dataset(args.source)
+    ds = load_from_disk(args.source)
     if isinstance(ds, Dataset):  # if no splits provided
         ds = DatasetDict({"train": ds})
 
@@ -49,7 +48,7 @@ def main():
 
     final = DatasetDict({
         "train": tv["train"],
-        "validation": tv["test"],
+        "validation": tv["test"], 
         "test": tts["test"],
     })
 
