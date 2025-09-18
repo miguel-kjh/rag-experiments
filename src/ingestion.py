@@ -6,7 +6,7 @@ from langchain_community.vectorstores import FAISS
 
 class Ingestion:
     def __init__(self, documents: List[str], embeddings: Embeddings):
-        self.documents = documents
+        self.documents  = documents
         self.embeddings = embeddings
 
     def ingest(self):
