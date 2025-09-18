@@ -1,4 +1,7 @@
 import os
+import random
+import numpy as np
+import torch
 
 FOLDER_DATA      = "data"
 FOLDER_RAW       = os.path.join(FOLDER_DATA, "raw")
@@ -15,6 +18,17 @@ Context: {context}
 Question: {question}
 
 Answer:"""
+
+def seed_everything(seed):
+    """Set seed for reproducibility."""
+    print(f"Setting seed: {seed}")
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
 def main():
     # create folders if they don't exist
