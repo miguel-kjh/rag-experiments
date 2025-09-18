@@ -23,6 +23,7 @@ DB_PATH = "data/db/legal-qa-v1_embeddings_all-mpnet-base-v2"
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 TOP_K = 1      # nº de documentos a recuperar
 BATCH_SIZE = 32  # <<--- batch size de generación
+FOLDER_OUTPUT = "results/generation.jsonl"
 
 # -----------------------------
 # Utilidades
@@ -129,7 +130,7 @@ def main():
 
     # Guardar resultados
     import json
-    with open("generations.jsonl", "w") as f:
+    with open(FOLDER_OUTPUT, "w") as f:
         for record in records.values():
             f.write(json.dumps(record) + "\n")
 

@@ -208,3 +208,4 @@ __marimo__/
 data/
 notebooks/faiss_index/
 unsloth_compiled_cache/
+results/
