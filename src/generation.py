@@ -35,7 +35,7 @@ def load_dataset(path: str) -> Dataset:
 
 def retrieve(query: str, db: FAISS, k: int = TOP_K) -> str:
     """Recupera documentos relevantes del índice vectorial y concatena sus contenidos."""
-    results = db.similarity_search(query, k=k)  # L2/Cosine según el índice
+    results = db.similarity_search(query, k=k)  # L2 similarity
     return "\n".join([doc.page_content for doc in results])
 
 def build_prompt(tokenizer, question: str, context: str) -> str:
