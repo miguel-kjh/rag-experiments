@@ -3,53 +3,58 @@ import os
 from datasets import load_from_disk
 from langchain_core.documents import Document
 from datasets import concatenate_datasets, DatasetDict
+import pickle
 
 from embeddings_models import SentenceTransformerEmbeddings
 from ingestion import Ingestion
-from utils import FOLDER_DB
+from utils import (
+    FOLDER_DB,
+    FOLDER_RAW,
+    RAGBENCH_SUBSETS
+)
 
 
+def create_db_for_ragbench(model_name: str):
+    model = SentenceTransformerEmbeddings(model=model_name)
+    for subset in RAGBENCH_SUBSETS:
+        print(f"Creating DB for RAG-Bench subset: {subset}")
+        folder_path = os.path.join(FOLDER_DB, f"ragbench-{subset}")
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        unique_documents = pickle.load(open(os.path.join(FOLDER_RAW, f"ragbench-{subset}", "unique_documents.pkl"), "rb"))
+        print(f"Loaded {len(unique_documents)} unique documents from {os.path.join(FOLDER_RAW, f'ragbench-{subset}', 'unique_documents.pkl')}")
+        documents = [
+            Document(
+                page_content=doc,
+                metadata={
+                    "id": id,
+                }
+            ) for id, doc in enumerate(unique_documents)
+        ]
+        ingestion = Ingestion(documents=documents, embeddings=model)
+        faiss_index = ingestion.ingest()
+        name_db = os.path.join(
+            folder_path,
+            f"ragbench-{subset}_embeddings_all-mpnet-base-v2"
+        )
+        print(f"Saving FAISS index to {name_db}")
+        faiss_index.save_local(name_db)
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--source", required=True, help="Path to local dataset (load_from_disk) or Hub dataset ID (load_dataset)")
-    parser.add_argument("--model_name", required=True, help="Name of the model to use for embeddings")
-    args = parser.parse_args()
 
-    dataset = load_from_disk(args.source)
-    
-    # si hay varias particiones, las concatenamos
-    if len(dataset.keys()) > 1:
-        dataset = concatenate_datasets(list(dataset.values()))
-        dataset = DatasetDict({"train": dataset})  # lo guardamos como train    
+DATASETS = {
+    "ragbench": create_db_for_ragbench,
+}
 
-    model = SentenceTransformerEmbeddings(model=args.model_name)
-
-    # TODO: chunking
-
-    # tranform dataset to list of Documents
-    documents = [
-        Document(
-            page_content=entry['answer'],
-            metadata={
-                "id": id,
-                "question": entry['question']
-            }
-        ) for id, entry in enumerate(dataset['train'])
-    ]
-
-    # create ingestion object
-    ingestion = Ingestion(documents=documents, embeddings=model)
-    faiss_index = ingestion.ingest()
-
-    # save faiss index
-    name_db = os.path.join(
-        FOLDER_DB,
-        f"{os.path.basename(args.source)}_embeddings_{args.model_name.replace('/', '_')}"
-    )
-
-    print(f"Saving FAISS index to {name_db}")
-    faiss_index.save_local(name_db)
+def main(args: argparse.Namespace):
+    if args.dataset in DATASETS:
+        DATASETS[args.dataset](args.model_name)
+    else:
+        raise ValueError(f"Unknown dataset: {args.dataset}")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", required=True, help="Path to local dataset (load_from_disk) or Hub dataset ID (load_dataset)")
+    parser.add_argument("--model_name", required=True, help="Name of the model to use for embeddings")
+    args = parser.parse_args() 
+
+    main(args)

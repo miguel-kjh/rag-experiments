@@ -5,7 +5,7 @@ import os
 
 from utils import (
     FOLDER_RAW,
-    RANGBENCH_SUBSETS,
+    RAGBENCH_SUBSETS,
 )
 
 def download_dataset(dataset_name, split=None):
@@ -18,7 +18,7 @@ def download_dataset(dataset_name, split=None):
 
 def download_ragbench():
     columns_to_keep = ["id", "question", "documents", "response"]
-    for subset in RANGBENCH_SUBSETS:
+    for subset in RAGBENCH_SUBSETS:
         print(f"Downloading RAG-Bench subset: {subset}")
         dataset = load_dataset("rungalileo/ragbench", subset)
         documents = []

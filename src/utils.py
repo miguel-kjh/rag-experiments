@@ -9,7 +9,7 @@ FOLDER_PROCESSED = os.path.join(FOLDER_DATA, "processed")
 FOLDER_COMBINED  = os.path.join(FOLDER_DATA, "combined")
 FOLDER_DB        = os.path.join(FOLDER_DATA, "db")
 
-RANGBENCH_SUBSETS = [
+RAGBENCH_SUBSETS = [
     'covidqa', 'cuad', 'delucionqa', 'emanual', 'expertqa', 'finqa', 'hagrid', 'hotpotqa', 'msmarco', 'pubmedqa', 'tatqa', 'techqa'
 ]
 
