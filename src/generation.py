@@ -3,6 +3,7 @@ from unsloth import FastLanguageModel
 from datasets import load_from_disk, Dataset
 from langchain_community.vectorstores import FAISS
 from vllm import SamplingParams
+from typing import Tuple, List
 
 from embeddings_models import SentenceTransformerEmbeddings
 from utils import (
@@ -18,10 +19,10 @@ from utils import (
 MODEL_GENERATION = "unsloth/Llama-3.2-1B-Instruct"
 MAX_SEQ_LENGTH = 8192
 MAX_GENERATION_LENGTH = 512
-DATASET = "data/processed/legal-qa-v1"
-DB_PATH = "data/db/legal-qa-v1_embeddings_all-mpnet-base-v2"
+DATASET = "data/raw/ragbench-covidqa"
+DB_PATH = "data/db/ragbench-covidqa/ragbench-covidqa_embeddings_all-mpnet-base-v2"
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
-TOP_K = 1      # nº de documentos a recuperar
+TOP_K = 4      # nº de documentos a recuperar
 BATCH_SIZE = 32  # <<--- batch size de generación
 FOLDER_OUTPUT = "results/generation.jsonl"
 
@@ -33,10 +34,12 @@ def load_dataset(path: str) -> Dataset:
     print(f"Loaded {len(ds)} samples from {path}")
     return ds
 
-def retrieve(query: str, db: FAISS, k: int = TOP_K) -> str:
+def retrieve(query: str, db: FAISS, k: int = TOP_K) -> Tuple[str, List[str]]:
     """Recupera documentos relevantes del índice vectorial y concatena sus contenidos."""
     results = db.similarity_search(query, k=k)  # L2 similarity
-    return "\n".join([doc.page_content for doc in results])
+    context = "\n".join([doc.page_content for doc in results])
+    idx = [doc.metadata["id"] for doc in results]
+    return context, idx
 
 def build_prompt(tokenizer, question: str, context: str) -> str:
     """Construye el prompt chat por muestra aplicando la chat template del tokenizer."""
@@ -76,7 +79,8 @@ def main():
     # Dataset
     dataset = load_dataset(DATASET)
     questions = dataset["question"]
-    answers = dataset["answer"]
+    golden_response = dataset["response"]
+    golden_document_ids = dataset["document_ids"]
     n = len(questions)
 
     # Parámetros de muestreo (vLLM)
@@ -92,7 +96,8 @@ def main():
     for start in range(0, n, BATCH_SIZE):
         end = min(start + BATCH_SIZE, n)
         batch_questions = questions[start:end]
-        batch_answers = answers[start:end]
+        batch_golden_response = golden_response[start:end]
+        batch_golden_document_ids = golden_document_ids[start:end]
 
         # Recuperación por lote
         batch_contexts = [retrieve(q, db) for q in batch_questions]
@@ -100,7 +105,7 @@ def main():
         # Prompts por muestra
         batch_prompts = [
             build_prompt(tokenizer, q, c)
-            for q, c in zip(batch_questions, batch_contexts)
+            for q, (c, _) in zip(batch_questions, batch_contexts)
         ]
 
         # Generación en batch (lista de prompts)
@@ -114,14 +119,13 @@ def main():
         batch_texts = [out.outputs[0].text for out in batch_outputs]
 
         for i in range(len(batch_questions)):
-            q = batch_questions[i]
-            a = batch_answers[i]
-            g = batch_texts[i]
             records[start + i] = {
-                "question": q,
-                "answer": a,
-                "generation": g,
-                "context": batch_contexts[i],
+                "question": batch_questions[i],
+                "golden_response": batch_golden_response[i],
+                "generated_response": batch_texts[i],
+                "document_ids": batch_contexts[i][1],
+                "golden_document_ids": batch_golden_document_ids[i],
+                "context": batch_contexts[i][0],
             }
 
         print(f"Processed {end}/{n} samples.")
