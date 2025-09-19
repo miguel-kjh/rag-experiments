@@ -4,6 +4,7 @@ from datasets import load_from_disk, Dataset
 from langchain_community.vectorstores import FAISS
 from vllm import SamplingParams
 from typing import Tuple, List
+import json
 
 from embeddings_models import SentenceTransformerEmbeddings
 from utils import (
@@ -133,7 +134,6 @@ def main():
     print(records[0])
 
     # Guardar resultados
-    import json
     with open(FOLDER_OUTPUT, "w") as f:
         for record in records.values():
             f.write(json.dumps(record) + "\n")
