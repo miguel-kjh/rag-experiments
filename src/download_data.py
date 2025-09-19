@@ -16,9 +16,16 @@ def download_dataset(dataset_name, split=None):
     print(f"Dataset saved to {folder_path}")
 
 def download_ragbench():
+    columns_to_keep = ["id", "question", "documents", "response"]
     for subset in RANGBENCH_SUBSETS:
         print(f"Downloading RAG-Bench subset: {subset}")
         dataset = load_dataset("rungalileo/ragbench", subset)
+        # Keep only specified columns in each split
+        for split in dataset.keys():
+            dataset[split] = dataset[split].remove_columns(
+                [col for col in dataset[split].column_names if col not in columns_to_keep]
+            )
+        # Save the entire dataset (all splits) to disk
         folder_path = os.path.join(FOLDER_RAW, f"ragbench-{subset}")
         dataset.save_to_disk(folder_path)
         print(f"RAG-Bench subset saved to {folder_path}")
