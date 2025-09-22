@@ -96,17 +96,17 @@ def main():
     # Generación por lotes
     for start in range(0, n, BATCH_SIZE):
         end = min(start + BATCH_SIZE, n)
-        batch_questions = questions[start:end]
-        batch_golden_response = golden_response[start:end]
-        batch_golden_document_ids = golden_document_ids[start:end]
+        batch_user_input = questions[start:end]
+        batch_reference = golden_response[start:end]
+        batch_target_document_ids = golden_document_ids[start:end]
 
         # Recuperación por lote
-        batch_contexts = [retrieve(q, db) for q in batch_questions]
+        batch_contexts = [retrieve(q, db) for q in batch_user_input]
 
         # Prompts por muestra
         batch_prompts = [
             build_prompt(tokenizer, q, c)
-            for q, (c, _) in zip(batch_questions, batch_contexts)
+            for q, (c, _) in zip(batch_user_input, batch_contexts)
         ]
 
         # Generación en batch (lista de prompts)
@@ -119,14 +119,14 @@ def main():
         # Extraer texto (manteniendo el orden del batch)
         batch_texts = [out.outputs[0].text for out in batch_outputs]
 
-        for i in range(len(batch_questions)):
+        for i in range(len(batch_user_input)):
             records[start + i] = {
-                "question": batch_questions[i],
-                "golden_response": batch_golden_response[i],
-                "generated_response": batch_texts[i],
+                "user_input": batch_user_input[i],
                 "document_ids": batch_contexts[i][1],
-                "golden_document_ids": batch_golden_document_ids[i],
-                "context": batch_contexts[i][0],
+                "target_document_ids": batch_target_document_ids[i],
+                "retrieved_contexts": batch_contexts[i][0],
+                "response": batch_texts[i],
+                "reference": batch_reference[i],
             }
 
         print(f"Processed {end}/{n} samples.")
