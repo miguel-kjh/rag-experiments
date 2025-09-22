@@ -38,9 +38,10 @@ def load_dataset(path: str) -> Dataset:
 def retrieve(query: str, db: FAISS, k: int = TOP_K) -> Tuple[str, List[str]]:
     """Recupera documentos relevantes del índice vectorial y concatena sus contenidos."""
     results = db.similarity_search(query, k=k)  # L2 similarity
+    list_contents = [doc.page_content for doc in results]
     context = "\n".join([doc.page_content for doc in results])
     idx = [doc.metadata["id"] for doc in results]
-    return context, idx
+    return context, idx, list_contents
 
 def build_prompt(tokenizer, question: str, context: str) -> str:
     """Construye el prompt chat por muestra aplicando la chat template del tokenizer."""
@@ -106,7 +107,7 @@ def main():
         # Prompts por muestra
         batch_prompts = [
             build_prompt(tokenizer, q, c)
-            for q, (c, _) in zip(batch_user_input, batch_contexts)
+            for q, (c, _, _) in zip(batch_user_input, batch_contexts)
         ]
 
         # Generación en batch (lista de prompts)
@@ -124,7 +125,7 @@ def main():
                 "user_input": batch_user_input[i],
                 "document_ids": batch_contexts[i][1],
                 "target_document_ids": batch_target_document_ids[i],
-                "retrieved_contexts": batch_contexts[i][0],
+                "retrieved_contexts": batch_contexts[i][2],
                 "response": batch_texts[i],
                 "reference": batch_reference[i],
             }
