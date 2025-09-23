@@ -58,7 +58,7 @@ def main(args: argparse.Namespace):
     if args.dataset_name in DATASETS_TO_DOWNLOAD:
         DATASETS_TO_DOWNLOAD[args.dataset_name]()
     else:
-        download_dataset(args.dataset_name, split=args.split)
+        raise ValueError(f"Dataset {args.dataset_name} not recognized. Available datasets: {list(DATASETS_TO_DOWNLOAD.keys())}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download datasets from Hugging Face using the datasets library.")
