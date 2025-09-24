@@ -28,8 +28,8 @@ DATASET_PATH = "results/generation_ragbench-covidqa_embeddings_all-mpnet-base-v2
 GENERATION_PATH = os.path.join(DATASET_PATH, "generation.jsonl")
 OUTPUT_PATH = os.path.join(DATASET_PATH, "evaluation_results.jsonl")
 OUTPUT_RECORD_PATH = os.path.join(DATASET_PATH, "detailed_evaluation_records.csv")
-MODEL_NAME = "gpt-4o"
-SUBSAMPLE_SIZE = 5
+MODEL_NAME = "gpt-4o-mini"
+SUBSAMPLE_SIZE = None  # Set to an integer for quick testing, or None to use full dataset
 
 
 def setup_environment():
@@ -85,18 +85,22 @@ def save_results(final_results: Dict, llm_results, output_path: str, output_reco
         f.write(str(final_results))
     print(f"Saved summary evaluation results to {output_path}")
 
+def join_results(reid_results: Dict, llm_results) -> Dict:
+    """Join re-identification results with LLM evaluation results."""
+    score_strs = {k: round(v, 4) for k, v in llm_results._repr_dict.items()}
+    final_result = score_strs.copy()
+    for k, v in reid_results.items():
+        final_result[k] = round(v, 4)
+    return final_result
+
 def main():
     setup_environment()
     evaluator_llm = build_components()
     dataset = load_dataset(GENERATION_PATH, SUBSAMPLE_SIZE)
     reid_result = run_reid_evaluation(dataset)
     llm_result = run_llm_evaluation(dataset, evaluator_llm)
-    score_strs = {k: round(v, 4) for k, v in llm_result._repr_dict.items()}
-    # join both results
-    final_result = score_strs.copy()
-    for k, v in reid_result.items():
-        final_result[k] = round(v, 4)
-    print("Final Evaluation Results:", json.dumps(final_result, indent=4))
+    final_result = join_results(reid_result, llm_result)
+    print("Final Evaluation Results:", final_result)
     save_results(final_result, llm_result, OUTPUT_PATH, OUTPUT_RECORD_PATH)
 
 
