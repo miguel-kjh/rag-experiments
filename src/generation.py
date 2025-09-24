@@ -1,3 +1,4 @@
+import os
 from unsloth import FastLanguageModel
 # from transformers import TextStreamer  # <- No se usa en batch, puedes quitarlo
 from datasets import load_from_disk, Dataset
@@ -25,7 +26,8 @@ DB_PATH = "data/db/ragbench-covidqa/ragbench-covidqa_embeddings_all-mpnet-base-v
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 TOP_K = 4      # nº de documentos a recuperar
 BATCH_SIZE = 32  # <<--- batch size de generación
-FOLDER_OUTPUT = "results/generation.jsonl"
+filename_of_experiment = os.path.basename(DB_PATH) + "_" + MODEL_GENERATION.split("/")[-1]
+FOLDER_OUTPUT = f"results/generation_{filename_of_experiment}"
 
 # -----------------------------
 # Utilidades
@@ -132,10 +134,12 @@ def main():
 
         print(f"Processed {end}/{n} samples.")
 
-    print(records[0])
-
     # Guardar resultados
-    with open(FOLDER_OUTPUT, "w") as f:
+    # crear folder_output si no existe
+    os.makedirs(FOLDER_OUTPUT, exist_ok=True)
+    generation_filename = os.path.join(FOLDER_OUTPUT, "generation.jsonl")
+    print(f"Saving generation results to {generation_filename}")
+    with open(generation_filename, "w") as f:
         for record in records.values():
             f.write(json.dumps(record) + "\n")
 
