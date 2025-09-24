@@ -1,4 +1,4 @@
-from datasets import load_dataset
+from datasets import load_dataset, DatasetDict
 import argparse
 import pickle
 import os
@@ -49,8 +49,60 @@ def download_ragbench():
             pickle.dump(unique_documents, f)
         print(f"Unique documents saved to {os.path.join(folder_path, 'unique_documents.pkl')}")
 
+def download_clapnq():
+    print("Downloading CLAP-NQ dataset")
+    columns_of_final_dataset = ["id", "question", "documents", "response"]
+    
+    dataset = load_dataset("PrimeQA/clapnq")
+
+    dataset = dataset.rename_columns({
+        "input": "question",
+        "passages": "documents",
+        "output": "response"
+    })
+
+    def process(example):
+        example["documents"] = [doc["text"] for doc in example["documents"]]
+        example["response"] = example["response"][0]["answer"]
+        return example
+
+    dataset = dataset.map(process)
+
+    # Reordenar columnas
+    dataset = dataset.map(
+        lambda x: {col: x[col] for col in columns_of_final_dataset}
+    )
+
+    dataset = DatasetDict({
+        "train": dataset["train"],
+        "validation": dataset["validation"],
+        "test": dataset["validation"]
+    })
+
+    db_documents = []
+    for split in dataset:
+        for docs in dataset[split]["documents"]:
+            for doc in docs:
+                db_documents.append(doc)
+    unique_documents = list(set(db_documents))
+    unique_documents.sort()
+    print(f"Number of unique documents in CLAP-NQ: {len(unique_documents)}")
+    document_idx_map = {doc: idx for idx, doc in enumerate(unique_documents)}
+    for split in dataset.keys():
+        dataset[split] = dataset[split].add_column(
+            "document_ids",
+            [[document_idx_map[doc] for doc in docs] for docs in dataset[split]["documents"]]
+        )
+    #save dataset and unique documents
+    folder_path = os.path.join(FOLDER_RAW, "clapnq")
+    with open(os.path.join(folder_path, "unique_documents.pkl"), "wb") as f:
+        pickle.dump(unique_documents, f)
+    dataset.save_to_disk(folder_path)
+    print(f"CLAP-NQ dataset saved to {folder_path}")
+
 DATASETS_TO_DOWNLOAD = {
     "ragbench": download_ragbench,
+    "clapnq": download_clapnq,
 }
 
 
