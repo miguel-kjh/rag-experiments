@@ -106,6 +106,21 @@ def precision_recall_at_k(preds_ranked: List[Sequence], gts: List[Sequence], ks:
         rows.append({"k": k, "Precision@k (macro)": float(np.mean(pks)), "Recall@k (macro)": float(np.mean(rks))})
     return rows
 
+
+def calc_reid_metrics(preds: List[Sequence], gts: List[Sequence], ks: Iterable[int] = [1, 2, 3, 5, 10]) -> Dict:
+    results = {}
+    results.update(precision_recall_f1(preds, gts))
+    results["mAP"] = mean_average_precision(preds, gts)
+    for k, cmc in zip(*cmc_curve(preds, gts, max_k=max(ks))):
+        if k in ks:
+            results[f"CMC@{k}"] = cmc
+    pr_at_k = precision_recall_at_k(preds, gts, ks)
+    for row in pr_at_k:
+        k = row.pop("k")
+        for metric, value in row.items():
+            results[f"{metric}@{k}"] = value
+    return results
+
 # -----------------------------
 # Example usage
 # -----------------------------
@@ -129,6 +144,7 @@ if __name__ == "__main__":
     gts   = [[1, 2, 3]]
 
     metrics(preds, gts)
+    print(calc_reid_metrics(preds, gts))
 
     print("Caso de prueba 2:")
     preds = [[1, 2, 3]]
