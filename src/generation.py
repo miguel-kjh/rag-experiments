@@ -15,6 +15,8 @@ from utils import (
     seed_everything,
 )
 
+# TODO: guardar los componentes del rag en un fichero aparte
+
 # -----------------------------
 # Config
 # -----------------------------
