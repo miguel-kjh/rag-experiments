@@ -1,10 +1,16 @@
-from datasets import load_dataset, DatasetDict
+from datasets import (
+    load_dataset, 
+    load_from_disk,
+    concatenate_datasets,
+    DatasetDict
+)
 import argparse
 import pickle
 import os
 
 from utils import (
     FOLDER_RAW,
+    FOLDER_PROCESSED,
     RAGBENCH_SUBSETS,
 )
 
@@ -100,9 +106,71 @@ def download_clapnq():
     dataset.save_to_disk(folder_path)
     print(f"CLAP-NQ dataset saved to {folder_path}")
 
+def download_parliament():
+    columns_of_final_dataset = ["id", "question", "documents", "response"]
+    # pre-trained dataset with train/val/test splits
+    db_documents_data = load_from_disk("data/raw/ORDERS_PARLIAMENT")
+
+    # Concatenar train + validation + test
+    db_documents_data["all"] = concatenate_datasets([
+        db_documents_data["train"],
+        db_documents_data["validation"],
+        db_documents_data["test"]
+    ])
+
+    # save dataset and unique documents
+    folder_path = os.path.join(FOLDER_PROCESSED, "parliament_all_docs")
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    db_documents_data.save_to_disk(folder_path)
+    print(f"Parliament dataset saved to {folder_path}")
+
+    # instructions dataset
+    qa_parliament = load_from_disk("data/raw/QA_PARLIAMENT_TRAIN")
+    qa_parliament = qa_parliament.rename_columns({
+        "PK": "id",
+        "context": "documents",
+        "answer": "response"
+    })
+    # quedarme solo con las columnas necesarias
+    qa_parliament = qa_parliament.map(
+        lambda x: {col: x[col] for col in columns_of_final_dataset}
+    )
+    qa_parliament_test = load_from_disk("data/raw/QA_PARLIAMENT_TEST")
+    qa_parliament_test = qa_parliament_test.rename_columns({
+        "PK": "id",
+        "answer": "response"
+    })
+    def process_create_documents(example):
+        # buscar el id en db_documents_data["all"] y obtener el context
+        pk = example["id"]
+        matched = db_documents_data["all"].filter(lambda x: x["PK"] == pk)
+        if len(matched) > 0:
+            example["documents"] = [matched[0]["text"]]
+        else:
+            raise ValueError(f"PK {pk} not found in db_documents_data")
+        return example
+    qa_parliament_test = qa_parliament_test.map(process_create_documents)
+    # quedarme solo con las columnas necesarias
+    qa_parliament_test = qa_parliament_test.map(
+        lambda x: {col: x[col] for col in columns_of_final_dataset}
+    )
+    print(qa_parliament_test)
+    # concatenar train + test
+    qa_parliament["test"] = qa_parliament_test["test"]
+    print(qa_parliament)
+    folder_path = os.path.join(FOLDER_PROCESSED, "parliament_qa")
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    qa_parliament.save_to_disk(folder_path)
+    print(f"Parliament QA dataset saved to {folder_path}")
+    
+    
+
 DATASETS_TO_DOWNLOAD = {
     "ragbench": download_ragbench,
     "clapnq": download_clapnq,
+    "parliament": download_parliament,
 }
 
 
