@@ -155,10 +155,8 @@ def download_parliament():
     qa_parliament_test = qa_parliament_test.map(
         lambda x: {col: x[col] for col in columns_of_final_dataset}
     )
-    print(qa_parliament_test)
     # concatenar train + test
     qa_parliament["test"] = qa_parliament_test["test"]
-    print(qa_parliament)
     folder_path = os.path.join(FOLDER_PROCESSED, "parliament_qa")
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)

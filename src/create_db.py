@@ -10,6 +10,7 @@ from ingestion import Ingestion
 from utils import (
     FOLDER_DB,
     FOLDER_RAW,
+    FOLDER_PROCESSED,
     RAGBENCH_SUBSETS
 )
 
@@ -40,9 +41,34 @@ def create_db_for_ragbench(model_name: str):
         print(f"Saving FAISS index to {name_db}")
         faiss_index.save_local(name_db)
 
+def create_db_for_parliament(model_name: str):
+    model = SentenceTransformerEmbeddings(model=model_name)
+    print("Creating DB for Parliament dataset")
+    folder_path = os.path.join(FOLDER_DB, "parliament_db")
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    db_documents_data = load_from_disk(os.path.join(FOLDER_PROCESSED, "parliament_all_docs"))
+    documents = [
+        Document(
+            page_content=doc["text"],
+            metadata={
+                "id": doc["PK"],
+            }
+        ) for doc in db_documents_data
+    ]
+    ingestion = Ingestion(documents=documents, embeddings=model)
+    faiss_index = ingestion.ingest()
+    name_db = os.path.join(
+        folder_path,
+        f"parliament_all_docs_embeddings_{model_name.replace('/', '_')}"
+    )
+    print(f"Saving FAISS index to {name_db}")
+    faiss_index.save_local(name_db)
+
 
 DATASETS = {
     "ragbench": create_db_for_ragbench,
+    "parliament": create_db_for_parliament,
 }
 
 def main(args: argparse.Namespace):
