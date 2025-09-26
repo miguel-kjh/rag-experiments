@@ -23,7 +23,7 @@ from utils import (
 MODEL_GENERATION = "unsloth/Llama-3.2-1B-Instruct"
 MAX_SEQ_LENGTH = 8192
 MAX_GENERATION_LENGTH = 512
-DATASET = "data/raw/ragbench-covidqa"
+DATASET = "data/processed/ragbench-covidqa"
 DB_PATH = "data/db/ragbench-covidqa/ragbench-covidqa_embeddings_all-mpnet-base-v2"
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 TOP_K = 4      # nº de documentos a recuperar
@@ -81,9 +81,10 @@ def main():
         embedding_model,
         allow_dangerous_deserialization=True,
     )
+    print(f"Loaded FAISS index from {DB_PATH}")
 
     # Dataset
-    dataset = load_dataset(DATASET)
+    dataset = load_from_disk(DATASET)["test"]
     questions = dataset["question"]
     golden_response = dataset["response"]
     golden_document_ids = dataset["document_ids"]

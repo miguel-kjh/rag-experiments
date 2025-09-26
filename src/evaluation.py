@@ -1,7 +1,5 @@
-import json
 import os
 from typing import Dict
-import openai
 import pandas as pd
 
 from dotenv import load_dotenv
@@ -15,7 +13,6 @@ from ragas.metrics import (
     BleuScore,
     RougeScore,
 )
-from ragas.embeddings import OpenAIEmbeddings
 from langchain_openai import ChatOpenAI
 
 from reid_metrics import calc_reid_metrics
