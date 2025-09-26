@@ -2,7 +2,6 @@ import argparse
 import os
 from datasets import load_from_disk
 from langchain_core.documents import Document
-from datasets import concatenate_datasets, DatasetDict
 import pickle
 
 from embeddings_models import SentenceTransformerEmbeddings
@@ -54,7 +53,7 @@ def create_db_for_parliament(model_name: str):
             metadata={
                 "id": doc["PK"],
             }
-        ) for doc in db_documents_data
+        ) for doc in db_documents_data["all"]
     ]
     ingestion = Ingestion(documents=documents, embeddings=model)
     faiss_index = ingestion.ingest()
