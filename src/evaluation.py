@@ -1,5 +1,5 @@
 import os
-from typing import Dict
+from typing import Dict, Optional, Any
 import pandas as pd
 
 from dotenv import load_dotenv
@@ -27,6 +27,7 @@ OUTPUT_PATH = os.path.join(DATASET_PATH, "evaluation_results.jsonl")
 OUTPUT_RECORD_PATH = os.path.join(DATASET_PATH, "detailed_evaluation_records.csv")
 MODEL_NAME = "gpt-4o-mini"
 SUBSAMPLE_SIZE = None  # Set to an integer for quick testing, or None to use full dataset
+RUN_GENERATION_EVALUATION = False  # Set to True if generation needs to be run
 
 
 def setup_environment():
@@ -72,11 +73,14 @@ def run_reid_evaluation(dataset):
     return calc_reid_metrics(preds, gts)
 
 
-def save_results(final_results: Dict, llm_results, output_path: str, output_record_path: str):
+
+
+def save_results(final_results: Dict, llm_results: Optional[Any], output_path: str, output_record_path: str):
     """Convert evaluation results to CSV and save them."""
-    df = llm_results.to_pandas()
-    df.to_csv(output_record_path, index=False)
-    print(f"Saved detailed evaluation records to {output_record_path}")
+    if llm_results is not None:
+        df = llm_results.to_pandas()
+        df.to_csv(output_record_path, index=False)
+        print(f"Saved detailed evaluation records to {output_record_path}")
     # Save summary results
     with open(output_path, "w") as f:
         f.write(str(final_results))
@@ -94,11 +98,15 @@ def main():
     setup_environment()
     evaluator_llm = build_components()
     dataset = load_dataset(GENERATION_PATH, SUBSAMPLE_SIZE)
-    reid_result = run_reid_evaluation(dataset)
-    llm_result = run_llm_evaluation(dataset, evaluator_llm)
-    final_result = join_results(reid_result, llm_result)
-    print("Final Evaluation Results:", final_result)
-    save_results(final_result, llm_result, OUTPUT_PATH, OUTPUT_RECORD_PATH)
+    final_result = run_reid_evaluation(dataset)
+    if RUN_GENERATION_EVALUATION:
+        llm_result = run_llm_evaluation(dataset, evaluator_llm)
+        final_result = join_results(final_result, llm_result)
+        print("Final Evaluation Results:", final_result)
+        save_results(final_result, llm_result, OUTPUT_PATH, OUTPUT_RECORD_PATH)
+    else:
+        print("ReID Evaluation Results:", final_result)
+        save_results(final_result, None, OUTPUT_PATH, OUTPUT_RECORD_PATH)
 
 
 
