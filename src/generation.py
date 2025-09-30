@@ -1,12 +1,10 @@
 import os
 import argparse
 import json
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
-from unsloth import FastLanguageModel
 from datasets import load_from_disk, Dataset
 from langchain_community.vectorstores import FAISS
-from vllm import SamplingParams
 
 from embeddings_models import SentenceTransformerEmbeddings
 from utils import (
@@ -44,6 +42,13 @@ def build_prompt(tokenizer, question: str, context: str) -> str:
         tokenize=False,
     )
 
+def is_no_model(model_value: Optional[str]) -> bool:
+    """Return True if the CLI intends to disable the LLM."""
+    if model_value is None:
+        return True
+    mv = str(model_value).strip().lower()
+    return mv in {"none", "null", ""}
+
 # -----------------------------
 # CLI Arguments
 # -----------------------------
@@ -51,8 +56,8 @@ def get_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Batch RAG generation with Unsloth + FAISS + vLLM")
 
     # Model / inference
-    p.add_argument("--model", default="unsloth/Llama-3.2-1B-Instruct",
-                   help="Model name to load (HuggingFace/Unsloth).")
+    p.add_argument("--model", default=None,
+                   help="Model name to load (HuggingFace/Unsloth). Use None to disable generation.")
     p.add_argument("--max-seq-length", type=int, default=32000,
                    help="Maximum input sequence length.")
     p.add_argument("--max-generation-length", type=int, default=1024,
@@ -98,19 +103,39 @@ def main():
 
     seed_everything(args.seed)
 
+    # Decide mode
+    retrieval_only = is_no_model(args.model)
+
     # Experiment name / output folder
-    filename_of_experiment = f"{os.path.basename(args.db_path)}_{args.model.split('/')[-1]}"
+    db_base = os.path.basename(args.db_path)
+    model_suffix = (args.model.split('/')[-1] if not retrieval_only else "retrieval_only")
+    filename_of_experiment = f"{db_base}_{model_suffix}"
     folder_output = args.output_dir or f"results/generation_{filename_of_experiment}"
     os.makedirs(folder_output, exist_ok=True)
 
-    # Model
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name = args.model,
-        max_seq_length = args.max_seq_length,
-        load_in_4bit = args.load_in_4bit,
-        load_in_8bit = args.load_in_8bit,
-        fast_inference = args.fast_inference,
-    )
+    # Model (optional)
+    model = None
+    tokenizer = None
+    sampling_params = None
+
+    if retrieval_only:
+        print("Running in RETRIEVAL-ONLY mode: no LLM will be loaded and no text will be generated.")
+    else:
+        from unsloth import FastLanguageModel
+        from vllm import SamplingParams 
+        
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name = args.model,
+            max_seq_length = args.max_seq_length,
+            load_in_4bit = args.load_in_4bit,
+            load_in_8bit = args.load_in_8bit,
+            fast_inference = args.fast_inference,
+        )
+        sampling_params = SamplingParams(
+            temperature = args.temperature,
+            max_tokens = args.max_generation_length,
+            seed = args.seed,
+        )
 
     # Vector DB for RAG
     embedding_model = SentenceTransformerEmbeddings(args.embedding_model, device='cuda')
@@ -123,7 +148,6 @@ def main():
 
     # Dataset
     dataset = load_from_disk(args.dataset)["test"]
-    print(dataset)
     questions = dataset["question"]
     golden_response = dataset["response"]
     try:
@@ -137,16 +161,9 @@ def main():
     if n < n_total:
         print(f"Limiting to first {n} samples (of {n_total}).")
 
-    # Sampling parameters (vLLM)
-    sampling_params = SamplingParams(
-        temperature = args.temperature,
-        max_tokens = args.max_generation_length,
-        seed = args.seed,
-    )
-
     records = {}
 
-    # Batch generation
+    # Batch loop
     for start in range(0, n, args.batch_size):
         end = min(start + args.batch_size, n)
         batch_user_input = questions[start:end]
@@ -156,29 +173,34 @@ def main():
         # Batch retrieval
         batch_contexts = [retrieve(q, db, args.top_k) for q in batch_user_input]
 
-        # Prompts
-        batch_prompts = [
-            build_prompt(tokenizer, q, c)
-            for q, (c, _, _) in zip(batch_user_input, batch_contexts)
-        ]
+        if retrieval_only:
+            # No prompt building, no generation
+            batch_texts = [None] * len(batch_user_input)  # explicit null in JSON
+        else:
+            # Prompts
+            batch_prompts = [
+                build_prompt(tokenizer, q, c)
+                for q, (c, _, _) in zip(batch_user_input, batch_contexts)
+            ]
 
-        # Batch generation
-        batch_outputs = model.fast_generate(
-            batch_prompts,
-            sampling_params = sampling_params,
-            lora_request = None,
-        )
+            # Batch generation
+            batch_outputs = model.fast_generate(
+                batch_prompts,
+                sampling_params = sampling_params,
+                lora_request = None,
+            )
 
-        # Extract text (keep order)
-        batch_texts = [out.outputs[0].text for out in batch_outputs]
+            # Extract text (keep order)
+            batch_texts = [out.outputs[0].text for out in batch_outputs]
 
+        # Collect records
         for i in range(len(batch_user_input)):
             records[start + i] = {
                 "user_input": batch_user_input[i],
                 "document_ids": batch_contexts[i][1],
                 "target_document_ids": batch_target_document_ids[i],
                 "retrieved_contexts": batch_contexts[i][2],
-                "response": batch_texts[i],
+                "response": batch_texts[i],      # None in retrieval-only
                 "reference": batch_reference[i],
             }
 

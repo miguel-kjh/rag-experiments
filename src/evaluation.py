@@ -104,7 +104,7 @@ def join_results(reid_results: Dict, llm_results) -> Dict:
 # -----------------------------
 def get_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Evaluate RAG generations with ReID metrics and LLM-based metrics.")
-    p.add_argument("--dataset-path", default="results/generation_parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2_Llama-3.2-1B-Instruct",
+    p.add_argument("--dataset-path", default="results/generation_parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2_retrieval_only",
                    help="Path to the dataset folder containing generation.jsonl.")
     p.add_argument("--generation-file", default="generation.jsonl",
                    help="Name of the generation JSONL file (inside dataset folder).")
