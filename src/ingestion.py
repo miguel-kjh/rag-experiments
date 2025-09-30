@@ -12,5 +12,5 @@ class Ingestion:
     def ingest(self):
         return FAISS.from_documents(
             documents=self.documents,
-            embedding=self.embeddings
+            embedding=self.embeddings,
         )

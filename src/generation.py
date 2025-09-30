@@ -53,9 +53,9 @@ def get_parser() -> argparse.ArgumentParser:
     # Model / inference
     p.add_argument("--model", default="unsloth/Llama-3.2-1B-Instruct",
                    help="Model name to load (HuggingFace/Unsloth).")
-    p.add_argument("--max-seq-length", type=int, default=8192,
+    p.add_argument("--max-seq-length", type=int, default=32000,
                    help="Maximum input sequence length.")
-    p.add_argument("--max-generation-length", type=int, default=512,
+    p.add_argument("--max-generation-length", type=int, default=1024,
                    help="Maximum number of tokens to generate.")
     p.add_argument("--fast-inference", action="store_true", default=True,
                    help="Enable fast_inference in Unsloth (default ON).")
@@ -65,11 +65,11 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Load the model in 8-bit mode.")
 
     # Data / RAG
-    p.add_argument("--dataset", default="data/processed/ragbench-covidqa",
+    p.add_argument("--dataset", default="data/processed/parliament_qa",
                    help="Path to the dataset (datasets.load_from_disk).")
-    p.add_argument("--db-path", default="data/db/ragbench-covidqa/ragbench-covidqa_embeddings_all-mpnet-base-v2",
+    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
                    help="Path to the FAISS index.")
-    p.add_argument("--embedding-model", default="sentence-transformers/all-mpnet-base-v2",
+    p.add_argument("--embedding-model", default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
                    help="Embedding model used for FAISS.")
     p.add_argument("--top-k", type=int, default=4,
                    help="Number of documents to retrieve per query.")
@@ -79,7 +79,7 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Batch size for generation.")
     p.add_argument("--temperature", type=float, default=0.0,
                    help="Sampling temperature for vLLM.")
-    p.add_argument("--seed", type=int, default=DEFAULT_SEED,
+    p.add_argument("--seed", type=int, default=DEFAULT_SEED, 
                    help="Random seed.")
     p.add_argument("--limit", type=int, default=None,
                    help="Limit the number of processed samples (optional).")
@@ -123,9 +123,14 @@ def main():
 
     # Dataset
     dataset = load_from_disk(args.dataset)["test"]
+    print(dataset)
     questions = dataset["question"]
     golden_response = dataset["response"]
-    golden_document_ids = dataset["document_ids"]
+    try:
+        golden_document_ids = dataset["document_ids"]
+    except ValueError:
+        golden_document_ids = dataset["id"]
+        golden_document_ids = [[x] for x in golden_document_ids]
 
     n_total = len(questions)
     n = min(args.limit, n_total) if args.limit is not None else n_total
