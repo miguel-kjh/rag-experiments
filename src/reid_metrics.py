@@ -1,6 +1,18 @@
 from typing import List, Sequence, Iterable, Tuple, Dict
 import numpy as np
 
+def entity_micro_accuracy(preds: List[Sequence], gts: List[Sequence]) -> float:
+    """Aciertos totales / entidades GT totales.
+       Ignora duplicados y el orden. Si todas las GT están vacías, devuelve 0.0."""
+    hits_total = 0
+    gt_total = 0
+    for p, g in zip(preds, gts):
+        p_set = set(p)
+        g_set = set(g)
+        hits_total += len(p_set & g_set)
+        gt_total += len(g_set)
+    return hits_total / gt_total if gt_total > 0 else 0.0
+
 def precision_recall_f1_single(pred: Sequence, gt: Sequence):
     pred_set = set(pred)
     gt_set = set(gt)
@@ -110,6 +122,7 @@ def precision_recall_at_k(preds_ranked: List[Sequence], gts: List[Sequence], ks:
 def calc_reid_metrics(preds: List[Sequence], gts: List[Sequence], ks: Iterable[int] = [1, 2, 3, 5, 10]) -> Dict:
     results = {}
     results.update(precision_recall_f1(preds, gts))
+    results["Accuracy"] = entity_micro_accuracy(preds, gts)
     results["mAP"] = mean_average_precision(preds, gts)
     for k, cmc in zip(*cmc_curve(preds, gts, max_k=max(ks))):
         if k in ks:
@@ -127,6 +140,7 @@ def calc_reid_metrics(preds: List[Sequence], gts: List[Sequence], ks: Iterable[i
 if __name__ == "__main__":
 
     def metrics(preds, gts):
+        print("Entity Micro Accuracy:", entity_micro_accuracy(preds, gts))
         print("Precision, Recall, F1:", precision_recall_f1(preds, gts))
         print("Mean Average Precision:", mean_average_precision(preds, gts))
 

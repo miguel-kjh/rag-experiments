@@ -1,14 +1,15 @@
 import os
-from typing import Dict, Optional, Any
+import argparse
 import pandas as pd
+from typing import Dict, Optional, Any
 
 from dotenv import load_dotenv
 from ragas import evaluate, EvaluationDataset
 from ragas.metrics import (
-    AnswerAccuracy, 
-    ContextRelevance, 
-    ResponseGroundedness, 
-    Faithfulness, 
+    AnswerAccuracy,
+    ContextRelevance,
+    ResponseGroundedness,
+    Faithfulness,
     FactualCorrectness,
     BleuScore,
     RougeScore,
@@ -18,33 +19,30 @@ from langchain_openai import ChatOpenAI
 from reid_metrics import calc_reid_metrics
 from utils import SEED
 
-# -----------------------------
-# Configuration
-# -----------------------------
-DATASET_PATH = "results/generation_ragbench-covidqa_embeddings_all-mpnet-base-v2_Llama-3.2-1B-Instruct"
-GENERATION_PATH = os.path.join(DATASET_PATH, "generation.jsonl")
-OUTPUT_PATH = os.path.join(DATASET_PATH, "evaluation_results.jsonl")
-OUTPUT_RECORD_PATH = os.path.join(DATASET_PATH, "detailed_evaluation_records.csv")
-MODEL_NAME = "gpt-4o-mini"
-SUBSAMPLE_SIZE = None  # Set to an integer for quick testing, or None to use full dataset
-RUN_GENERATION_EVALUATION = False  # Set to True if generation needs to be run
 
-
+# -----------------------------
+# Environment setup
+# -----------------------------
 def setup_environment():
     """Load environment variables and set the OpenAI API key."""
     load_dotenv()
     os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 
 
-def build_components():
-    """Initialize evaluation components"""
-    evaluator_llm = ChatOpenAI(model=MODEL_NAME, seed=SEED)
+# -----------------------------
+# Components
+# -----------------------------
+def build_components(model_name: str):
+    """Initialize evaluation components."""
+    evaluator_llm = ChatOpenAI(model=model_name, seed=SEED)
     return evaluator_llm
 
 
-def load_dataset(path: str, subsample: int = None):
+# -----------------------------
+# Data loading
+# -----------------------------
+def load_dataset(path: str, subsample: Optional[int] = None):
     """Load dataset from JSONL and optionally subsample it."""
-    #dataset = EvaluationDataset.from_jsonl(path)
     dataset = pd.read_json(path, lines=True).to_dict(orient="records")
     if subsample:
         dataset = dataset[:subsample]
@@ -52,6 +50,9 @@ def load_dataset(path: str, subsample: int = None):
     return dataset
 
 
+# -----------------------------
+# Evaluations
+# -----------------------------
 def run_llm_evaluation(dataset, evaluator_llm):
     """Run evaluation on the dataset using predefined metrics."""
     ragas_dataset = EvaluationDataset.from_list(dataset)
@@ -66,6 +67,7 @@ def run_llm_evaluation(dataset, evaluator_llm):
     ]
     return evaluate(dataset=ragas_dataset, metrics=metrics, llm=evaluator_llm)
 
+
 def run_reid_evaluation(dataset):
     """Run re-identification metrics evaluation."""
     preds = [item["document_ids"] for item in dataset]
@@ -73,10 +75,11 @@ def run_reid_evaluation(dataset):
     return calc_reid_metrics(preds, gts)
 
 
-
-
+# -----------------------------
+# Saving results
+# -----------------------------
 def save_results(final_results: Dict, llm_results: Optional[Any], output_path: str, output_record_path: str):
-    """Convert evaluation results to CSV and save them."""
+    """Save evaluation results (summary JSONL + detailed CSV if available)."""
     if llm_results is not None:
         df = llm_results.to_pandas()
         df.to_csv(output_record_path, index=False)
@@ -86,6 +89,7 @@ def save_results(final_results: Dict, llm_results: Optional[Any], output_path: s
         f.write(str(final_results))
     print(f"Saved summary evaluation results to {output_path}")
 
+
 def join_results(reid_results: Dict, llm_results) -> Dict:
     """Join re-identification results with LLM evaluation results."""
     score_strs = {k: round(v, 4) for k, v in llm_results._repr_dict.items()}
@@ -94,20 +98,59 @@ def join_results(reid_results: Dict, llm_results) -> Dict:
         final_result[k] = round(v, 4)
     return final_result
 
+
+# -----------------------------
+# CLI parser
+# -----------------------------
+def get_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="Evaluate RAG generations with ReID metrics and LLM-based metrics.")
+    p.add_argument("--dataset-path", default="results/generation_ragbench-covidqa_embeddings_all-mpnet-base-v2_Llama-3.2-1B-Instruct",
+                   help="Path to the dataset folder containing generation.jsonl.")
+    p.add_argument("--generation-file", default="generation.jsonl",
+                   help="Name of the generation JSONL file (inside dataset folder).")
+    p.add_argument("--output-file", default="evaluation_results.jsonl",
+                   help="Filename for summary results.")
+    p.add_argument("--output-record-file", default="detailed_evaluation_records.csv",
+                   help="Filename for detailed LLM evaluation records.")
+    p.add_argument("--model-name", default="gpt-4o-mini",
+                   help="LLM model used for evaluation (via OpenAI).")
+    p.add_argument("--subsample-size", type=int, default=None,
+                   help="Limit the dataset to the first N samples (for quick testing).")
+    p.add_argument("--run-llm-evaluation", action="store_true",
+                   help="Also run LLM-based evaluation metrics (Ragas).")
+    return p
+
+
+# -----------------------------
+# Main
+# -----------------------------
 def main():
+    parser = get_parser()
+    args = parser.parse_args()
+
     setup_environment()
-    evaluator_llm = build_components()
-    dataset = load_dataset(GENERATION_PATH, SUBSAMPLE_SIZE)
+
+    dataset_path = args.dataset_path
+    generation_path = os.path.join(dataset_path, args.generation_file)
+    output_path = os.path.join(dataset_path, args.output_file)
+    output_record_path = os.path.join(dataset_path, args.output_record_file)
+
+    # Load dataset
+    dataset = load_dataset(generation_path, args.subsample_size)
+
+    # Run ReID evaluation
     final_result = run_reid_evaluation(dataset)
-    if RUN_GENERATION_EVALUATION:
+
+    # Optionally run LLM-based evaluation
+    if args.run_llm_evaluation:
+        evaluator_llm = build_components(args.model_name)
         llm_result = run_llm_evaluation(dataset, evaluator_llm)
         final_result = join_results(final_result, llm_result)
         print("Final Evaluation Results:", final_result)
-        save_results(final_result, llm_result, OUTPUT_PATH, OUTPUT_RECORD_PATH)
+        save_results(final_result, llm_result, output_path, output_record_path)
     else:
         print("ReID Evaluation Results:", final_result)
-        save_results(final_result, None, OUTPUT_PATH, OUTPUT_RECORD_PATH)
-
+        save_results(final_result, None, output_path, output_record_path)
 
 
 if __name__ == "__main__":
