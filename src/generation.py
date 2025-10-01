@@ -1,12 +1,16 @@
 import os
 import argparse
 import json
+import hashlib
+import re
+from datetime import datetime, timezone
 from typing import Tuple, List, Optional
 
 from datasets import load_from_disk, Dataset
 from langchain_community.vectorstores import FAISS
 
 from embeddings_models import SentenceTransformerEmbeddings
+from evaluation import calc_reid_metrics
 from utils import (
     SEED as DEFAULT_SEED,
     SYSTEM_PROMPT,
@@ -27,7 +31,7 @@ def retrieve(query: str, db: FAISS, k: int) -> Tuple[str, List[str], List[str]]:
     results = db.similarity_search(query, k=k)  # L2 similarity
     list_contents = [doc.page_content for doc in results]
     context = "\n".join(list_contents)
-    idx = [doc.metadata["id"] for doc in results]
+    idx = [doc.metadata.get("id", doc.metadata.get("doc_id", None)) for doc in results]
     return context, idx, list_contents
 
 def build_prompt(tokenizer, question: str, context: str) -> str:
@@ -43,11 +47,37 @@ def build_prompt(tokenizer, question: str, context: str) -> str:
     )
 
 def is_no_model(model_value: Optional[str]) -> bool:
-    """Return True if the CLI intends to disable the LLM."""
     if model_value is None:
         return True
     mv = str(model_value).strip().lower()
     return mv in {"none", "null", ""}
+
+def slugify(s: str) -> str:
+    s = s.strip().lower()
+    s = re.sub(r"[^\w\-\.]+", "-", s)
+    s = re.sub(r"-{2,}", "-", s)
+    return s.strip("-_")
+
+def short_alias(path_or_name: str) -> str:
+    """Make a compact alias from a HF id or path (last segment, shortened)."""
+    if not path_or_name:
+        return "none"
+    base = path_or_name.split("/")[-1]
+    base = base.replace("sentence-transformers-", "").replace("paraphrase-", "")
+    return slugify(base)
+
+def make_expid(hparams_for_hash: dict) -> str:
+    """Stable short hash from selected hyperparams."""
+    keys = [
+        "db_path", "embedding_model", "top_k", "model", "temperature",
+        "max_seq_length", "max_generation_length", "seed"
+    ]
+    payload = "|".join(f"{k}={hparams_for_hash.get(k)}" for k in keys)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:8]
+
+def now_utc_compact() -> str:
+    # ISO-like but compact; Z = UTC
+    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
 
 # -----------------------------
 # CLI Arguments
@@ -91,7 +121,9 @@ def get_parser() -> argparse.ArgumentParser:
 
     # Output
     p.add_argument("--output-dir", default=None,
-                   help="Output folder. Default: results/generation_{dbbasename}_{modelname}.")
+                   help="Base output folder. If not set, a structured path under results/ is used.")
+    p.add_argument("--tag", default=None,
+                   help="Optional tag to append to the run folder name (e.g., ablationA, grid1).")
     return p
 
 # -----------------------------
@@ -103,15 +135,49 @@ def main():
 
     seed_everything(args.seed)
 
-    # Decide mode
     retrieval_only = is_no_model(args.model)
+    task = "retrieval" if retrieval_only else "rag"
 
-    # Experiment name / output folder
-    db_base = os.path.basename(args.db_path)
-    model_suffix = (args.model.split('/')[-1] if not retrieval_only else "retrieval_only")
-    filename_of_experiment = f"{db_base}_{model_suffix}"
-    folder_output = args.output_dir or f"results/generation_{filename_of_experiment}"
+    # Aliases
+    dataset_alias = slugify(os.path.basename(args.dataset))
+    db_alias = slugify(os.path.basename(args.db_path))
+    emb_alias = short_alias(args.embedding_model)
+    model_alias = short_alias(args.model) if not retrieval_only else "none"
+
+    # Short signature for uniqueness
+    expid = make_expid({
+        "db_path": os.path.basename(args.db_path),
+        "embedding_model": args.embedding_model,
+        "top_k": args.top_k,
+        "model": args.model,
+        "temperature": args.temperature,
+        "max_seq_length": args.max_seq_length,
+        "max_generation_length": args.max_generation_length,
+        "seed": args.seed,
+    })
+
+    timestamp = now_utc_compact()
+    retriever_sig = f"R@k{args.top_k}-{emb_alias}"
+
+    # Folder structure
+    if args.output_dir:
+        base_dir = args.output_dir
+    else:
+        base_dir = os.path.join(
+            "results",
+            dataset_alias,
+            db_alias,
+            retriever_sig,
+        )
+
+    run_folder_name = f"{timestamp}_{task}_{model_alias}_{expid}"
+    if args.tag:
+        run_folder_name += f"_{slugify(args.tag)}"
+
+    folder_output = os.path.join(base_dir, run_folder_name)
     os.makedirs(folder_output, exist_ok=True)
+
+    print(f"[Run dir] {folder_output}")
 
     # Model (optional)
     model = None
@@ -122,7 +188,7 @@ def main():
         print("Running in RETRIEVAL-ONLY mode: no LLM will be loaded and no text will be generated.")
     else:
         from unsloth import FastLanguageModel
-        from vllm import SamplingParams 
+        from vllm import SamplingParams
         
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name = args.model,
@@ -155,11 +221,44 @@ def main():
     except ValueError:
         golden_document_ids = dataset["id"]
         golden_document_ids = [[x] for x in golden_document_ids]
+    print(f"Using dataset from {args.dataset}")
 
     n_total = len(questions)
     n = min(args.limit, n_total) if args.limit is not None else n_total
     if n < n_total:
         print(f"Limiting to first {n} samples (of {n_total}).")
+
+    # Save hparams.json (includes derived metadata)
+    hparams = {
+        "timestamp_utc": timestamp,
+        "task": task,
+        "expid": expid,
+        "tag": args.tag,
+        "dataset": args.dataset,
+        "dataset_alias": dataset_alias,
+        "db_path": args.db_path,
+        "db_alias": db_alias,
+        "embedding_model": args.embedding_model,
+        "embedding_alias": emb_alias,
+        "top_k": args.top_k,
+        "model": args.model,
+        "model_alias": model_alias,
+        "max_seq_length": args.max_seq_length,
+        "max_generation_length": args.max_generation_length,
+        "fast_inference": args.fast_inference,
+        "load_in_4bit": args.load_in_4bit,
+        "load_in_8bit": args.load_in_8bit,
+        "batch_size": args.batch_size,
+        "temperature": args.temperature,
+        "seed": args.seed,
+        "limit": args.limit,
+        "n_total_samples": n_total,
+        "n_evaluated": n,
+        "retriever_signature": retriever_sig,
+        "output_dir": folder_output,
+    }
+    with open(os.path.join(folder_output, "hparams.json"), "w", encoding="utf-8") as f:
+        json.dump(hparams, f, ensure_ascii=False, indent=2)
 
     records = {}
 
@@ -174,7 +273,6 @@ def main():
         batch_contexts = [retrieve(q, db, args.top_k) for q in batch_user_input]
 
         if retrieval_only:
-            # No prompt building, no generation
             batch_texts = [None] * len(batch_user_input)  # explicit null in JSON
         else:
             # Prompts
@@ -182,14 +280,12 @@ def main():
                 build_prompt(tokenizer, q, c)
                 for q, (c, _, _) in zip(batch_user_input, batch_contexts)
             ]
-
             # Batch generation
             batch_outputs = model.fast_generate(
                 batch_prompts,
                 sampling_params = sampling_params,
                 lora_request = None,
             )
-
             # Extract text (keep order)
             batch_texts = [out.outputs[0].text for out in batch_outputs]
 
@@ -207,11 +303,24 @@ def main():
         print(f"Processed {end}/{n} samples.")
 
     # Save results
-    generation_filename = os.path.join(folder_output, "generation.jsonl")
-    print(f"Saving generation results to {generation_filename}")
-    with open(generation_filename, "w", encoding="utf-8") as f:
+    filename = "retrieval.jsonl" if retrieval_only else "generation.jsonl"
+    output_path = os.path.join(folder_output, filename)
+    print(f"Saving results to {output_path}")
+    with open(output_path, "w", encoding="utf-8") as f:
         for key in sorted(records.keys()):
             f.write(json.dumps(records[key], ensure_ascii=False) + "\n")
 
+    # Evaluation (ReID)
+    print("Running re-identification evaluation...")
+    preds = [records[k]["document_ids"] for k in sorted(records.keys())]
+    refs = [records[k]["target_document_ids"] for k in sorted(records.keys())]
+    metrics = calc_reid_metrics(preds, refs)
+    print("ReID results:")
+    print(metrics)
+    with open(os.path.join(folder_output, "reid_results.json"), "w", encoding="utf-8") as f:
+        json.dump(metrics, f, ensure_ascii=False, indent=2)
+
+
 if __name__ == "__main__":
     main()
+
