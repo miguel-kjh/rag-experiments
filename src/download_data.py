@@ -101,6 +101,8 @@ def download_clapnq():
         )
     #save dataset and unique documents
     folder_path = os.path.join(FOLDER_PROCESSED, "clapnq")
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
     with open(os.path.join(folder_path, "unique_documents.pkl"), "wb") as f:
         pickle.dump(unique_documents, f)
     dataset.save_to_disk(folder_path)
@@ -180,7 +182,7 @@ def main(args: argparse.Namespace):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download datasets from Hugging Face using the datasets library.")
-    parser.add_argument("--dataset", type=str, help="Name of the dataset (e.g., 'imdb', 'squad')")
+    parser.add_argument("--dataset", type=str, help="Name of the dataset")
     parser.add_argument("--split", type=str, default=None, help="Dataset split to download (e.g., 'train', 'test')")
     args = parser.parse_args()
 

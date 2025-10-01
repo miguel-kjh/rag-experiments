@@ -8,8 +8,8 @@ from typing import Tuple, List, Optional
 
 from datasets import load_from_disk, Dataset
 from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
 
-from embeddings_models import SentenceTransformerEmbeddings
 from evaluation import calc_reid_metrics
 from utils import (
     SEED as DEFAULT_SEED,
@@ -204,7 +204,10 @@ def main():
         )
 
     # Vector DB for RAG
-    embedding_model = SentenceTransformerEmbeddings(args.embedding_model, device='cuda')
+    embedding_model = HuggingFaceEmbeddings(
+        model_name=args.embedding_model,
+        model_kwargs={"device": "cuda"}
+    )
     db = FAISS.load_local(
         args.db_path,
         embedding_model,
@@ -299,7 +302,6 @@ def main():
                 "response": batch_texts[i],      # None in retrieval-only
                 "reference": batch_reference[i],
             }
-
         print(f"Processed {end}/{n} samples.")
 
     # Save results
