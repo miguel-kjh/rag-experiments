@@ -11,6 +11,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from evaluation import calc_reid_metrics
+from retriever import Retriever, NaiveDenseRetriever
 from utils import (
     SEED as DEFAULT_SEED,
     SYSTEM_PROMPT,
@@ -26,9 +27,9 @@ def load_dataset(path: str) -> Dataset:
     print(f"Loaded {len(ds)} samples from {path}")
     return ds
 
-def retrieve(query: str, db: FAISS, k: int) -> Tuple[str, List[str], List[str]]:
+def retrieve_documents(query: str, retriever: Retriever) -> Tuple[str, List[str], List[str]]:
     """Retrieve top-k relevant documents from the vector index and concatenate contents."""
-    results = db.similarity_search(query, k=k)  # L2 similarity
+    results = retriever.retrieve(query)
     list_contents = [doc.page_content for doc in results]
     context = "\n".join(list_contents)
     idx = [doc.metadata.get("id", doc.metadata.get("doc_id", None)) for doc in results]
@@ -108,6 +109,10 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Embedding model used for FAISS.")
     p.add_argument("--top-k", type=int, default=4,
                    help="Number of documents to retrieve per query.")
+    p.add_argument("--similarity_function", default="similarity",
+                   help="Similarity function to use (similarity or mmr).")
+    p.add_argument("--lambda-mult", type=float, default=None,
+                   help="Lambda multiplier for MMR (if using mmr).")
 
     # Batch / sampling
     p.add_argument("--batch-size", type=int, default=32,
@@ -156,29 +161,6 @@ def main():
         "seed": args.seed,
     })
 
-    timestamp = now_utc_compact()
-    retriever_sig = f"R@k{args.top_k}-{emb_alias}"
-
-    # Folder structure
-    if args.output_dir:
-        base_dir = args.output_dir
-    else:
-        base_dir = os.path.join(
-            "results",
-            dataset_alias,
-            db_alias,
-            retriever_sig,
-        )
-
-    run_folder_name = f"{timestamp}_{task}_{model_alias}_{expid}"
-    if args.tag:
-        run_folder_name += f"_{slugify(args.tag)}"
-
-    folder_output = os.path.join(base_dir, run_folder_name)
-    os.makedirs(folder_output, exist_ok=True)
-
-    print(f"[Run dir] {folder_output}")
-
     # Model (optional)
     model = None
     tokenizer = None
@@ -214,6 +196,38 @@ def main():
         allow_dangerous_deserialization=True,
     )
     print(f"Loaded FAISS index from {args.db_path}")
+
+    # Retriever
+    retriever = NaiveDenseRetriever(
+        db=db,
+        top_k=args.top_k,
+        search_type=args.similarity_function,
+        lambda_mult=args.lambda_mult,
+    )
+    print(f"Using retriever: {retriever}")
+
+    timestamp = now_utc_compact()
+    retriever_sig = f"R@k{args.top_k}-{emb_alias}"
+
+    # Folder structure
+    if args.output_dir:
+        base_dir = args.output_dir
+    else:
+        base_dir = os.path.join(
+            "results",
+            dataset_alias,
+            db_alias,
+            retriever_sig,
+        )
+
+    run_folder_name = f"{timestamp}_{task}_{retriever}_{model_alias}_{expid}"
+    if args.tag:
+        run_folder_name += f"_{slugify(args.tag)}"
+
+    folder_output = os.path.join(base_dir, run_folder_name)
+    os.makedirs(folder_output, exist_ok=True)
+
+    print(f"[Run dir] {folder_output}")
 
     # Dataset
     dataset = load_from_disk(args.dataset)["test"]
@@ -273,7 +287,7 @@ def main():
         batch_target_document_ids = golden_document_ids[start:end]
 
         # Batch retrieval
-        batch_contexts = [retrieve(q, db, args.top_k) for q in batch_user_input]
+        batch_contexts = [retrieve_documents(q, retriever) for q in batch_user_input]
 
         if retrieval_only:
             batch_texts = [None] * len(batch_user_input)  # explicit null in JSON
