@@ -25,7 +25,7 @@ class NaiveDenseRetriever(Retriever):
         self.search_type = search_type
         self.lambda_mult = lambda_mult
         search_kwargs = {"k": top_k} if search_type == "similarity" else {"k": top_k, "fetch_k": top_k*2, "lambda_mult": lambda_mult}
-        self.retrieve_component = self.db.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
+        self.dense_retriver = self.db.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
 
     def __str__(self):
         if self.search_type == "similarity":
@@ -34,5 +34,5 @@ class NaiveDenseRetriever(Retriever):
             return f"NaiveDenseRetriever(top_k={self.top_k}, search_type='{self.search_type}', lambda_mult={self.lambda_mult})"
 
     def retrieve(self, query: str):
-        return self.retrieve_component.invoke(query)
+        return self.dense_retriver.invoke(query)
         
