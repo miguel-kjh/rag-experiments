@@ -8,7 +8,7 @@ from typing import Tuple, List, Optional
 
 from datasets import load_from_disk, Dataset
 from langchain_community.vectorstores import FAISS
-#from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from evaluation import calc_reid_metrics
 from retriever import Retriever, NaiveDenseRetriever
@@ -187,9 +187,9 @@ def main():
         )
 
     # Vector DB for RAG
-    embedding_model = SentenceTransformerEmbeddings(
-        model=args.embedding_model,
-        device="cuda"
+    embedding_model = HuggingFaceEmbeddings(
+        model_name=args.embedding_model,
+        model_kwargs={"device": "cuda"},
     )
     db = FAISS.load_local(
         args.db_path,

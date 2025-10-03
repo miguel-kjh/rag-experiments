@@ -4,7 +4,6 @@ from datasets import load_from_disk
 from langchain_core.documents import Document
 import pickle
 
-from embeddings_models import SentenceTransformerEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from ingestion import Ingestion
 from utils import (
@@ -16,10 +15,9 @@ from utils import (
 
 
 def create_db_for_ragbench(model_name: str, max_length: int):
-    model = SentenceTransformerEmbeddings(
-        model=model_name,
-        device="cuda",
-        max_length=max_length
+    model = HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs={"device": "cuda"}
     )
     for subset in RAGBENCH_SUBSETS:
         print(f"Creating DB for RAG-Bench subset: {subset}")
@@ -46,10 +44,9 @@ def create_db_for_ragbench(model_name: str, max_length: int):
         faiss_index.save_local(name_db)
 
 def create_db_for_parliament(model_name: str, max_length: int):
-    model = SentenceTransformerEmbeddings(
-        model=model_name,
-        device="cuda",
-        max_length=max_length
+    model = HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs={"device": "cuda"}
     )
     print("Creating DB for Parliament dataset")
     folder_path = os.path.join(FOLDER_DB, "parliament_db")
