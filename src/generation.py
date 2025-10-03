@@ -11,7 +11,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from evaluation import calc_reid_metrics
-from retriever import Retriever, NaiveDenseRetriever
+from retriever import Retriever, NaiveDenseRetriever, HybridRetriever
 from embeddings_models import SentenceTransformerEmbeddings
 from utils import (
     SEED as DEFAULT_SEED,
@@ -101,11 +101,15 @@ def get_parser() -> argparse.ArgumentParser:
     p.add_argument("--load-in-8bit", action="store_true", default=False,
                    help="Load the model in 8-bit mode.")
 
-    # Data / RAG
+    # Data
     p.add_argument("--dataset", default="data/processed/parliament_qa",
                    help="Path to the dataset (datasets.load_from_disk).")
     p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
                    help="Path to the FAISS index.")
+
+    # Retriever type
+    p.add_argument("--retriever-type", default="dense",
+                   help="Type of retriever to use: 'dense' or 'hybrid'.")
     p.add_argument("--embedding-model", default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
                    help="Embedding model used for FAISS.")
     p.add_argument("--top-k", type=int, default=4,
@@ -114,6 +118,10 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Similarity function to use (similarity or mmr).")
     p.add_argument("--lambda-mult", type=float, default=None,
                    help="Lambda multiplier for MMR (if using mmr).")
+    p.add_argument("--sparse-retriever", default="bm25",
+                   help="If retriever-type is 'hybrid', choose sparse retriever: 'bm25' or 'tfidf'.")
+    p.add_argument("--alpha", type=float, default=0.7,
+                   help="If retriever-type is 'hybrid', alpha weight for dense retriever (0 to 1).")
 
     # Batch / sampling
     p.add_argument("--batch-size", type=int, default=32,
@@ -199,12 +207,24 @@ def main():
     print(f"Loaded FAISS index from {args.db_path}")
 
     # Retriever
-    retriever = NaiveDenseRetriever(
-        db=db,
-        top_k=args.top_k,
-        search_type=args.similarity_function,
-        lambda_mult=args.lambda_mult,
-    )
+    if args.retriever_type == "dense":
+        retriever = NaiveDenseRetriever(
+            db=db,
+            top_k=args.top_k,
+            search_type=args.similarity_function,
+            lambda_mult=args.lambda_mult,
+        )
+    elif args.retriever_type == "hybrid":
+        retriever = HybridRetriever(
+            db=db,
+            sparse_retriever_name=args.sparse_retriever,
+            top_k=args.top_k,
+            alpha=args.alpha,
+            search_type=args.similarity_function,
+            lambda_mult=args.lambda_mult,
+        )
+    else:
+        raise ValueError("retriever-type must be 'dense' or 'hybrid'")
     print(f"Using retriever: {retriever}")
 
     timestamp = now_utc_compact()
