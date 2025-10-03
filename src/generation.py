@@ -12,6 +12,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 from evaluation import calc_reid_metrics
 from retriever import Retriever, NaiveDenseRetriever, HybridRetriever
+from reranker import Reranker, CrossEncoderReranker
 from embeddings_models import SentenceTransformerEmbeddings
 from utils import (
     SEED as DEFAULT_SEED,
@@ -28,9 +29,14 @@ def load_dataset(path: str) -> Dataset:
     print(f"Loaded {len(ds)} samples from {path}")
     return ds
 
-def retrieve_documents(query: str, retriever: Retriever) -> Tuple[str, List[str], List[str]]:
+def retrieve_documents(query: str, retriever: Retriever, reranker: Reranker) -> Tuple[str, List[str], List[str]]:
     """Retrieve top-k relevant documents from the vector index and concatenate contents."""
     results = retriever.retrieve(query)
+
+    if reranker:
+        results = reranker.rerank(query, results)
+        results = [doc for doc, score in results]
+
     list_contents = [doc.page_content for doc in results]
     context = "\n".join(list_contents)
     idx = [doc.metadata.get("id", doc.metadata.get("doc_id", None)) for doc in results]
@@ -102,9 +108,9 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Load the model in 8-bit mode.")
 
     # Data
-    p.add_argument("--dataset", default="data/processed/parliament_qa",
+    p.add_argument("--dataset", default="data/processed/ragbench-covidqa",
                    help="Path to the dataset (datasets.load_from_disk).")
-    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
+    p.add_argument("--db-path", default="data/db/ragbench-covidqa/ragbench-covidqa_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
                    help="Path to the FAISS index.")
 
     # Retriever type
@@ -122,6 +128,12 @@ def get_parser() -> argparse.ArgumentParser:
                    help="If retriever-type is 'hybrid', choose sparse retriever: 'bm25' or 'tfidf'.")
     p.add_argument("--alpha", type=float, default=0.7,
                    help="If retriever-type is 'hybrid', alpha weight for dense retriever (0 to 1).")
+    
+    # Reranker (not used in main script, but could be integrated)
+    p.add_argument("--reranker-model", default=None,
+                   help="Cross-encoder model for reranking (optional). E.g., 'BAAI/bge-reranker-v2-m3'.")
+    p.add_argument("--top-rank", type=int, default=5,
+                   help="Number of top documents to keep after reranking.")
 
     # Batch / sampling
     p.add_argument("--batch-size", type=int, default=32,
@@ -227,6 +239,14 @@ def main():
         raise ValueError("retriever-type must be 'dense' or 'hybrid'")
     print(f"Using retriever: {retriever}")
 
+    reranker = None
+    if args.reranker_model:
+        reranker = CrossEncoderReranker(
+            model_name=args.reranker_model,
+            top_rank=args.top_rank,
+        )
+        print(f"Reranker enabled: {reranker}")
+
     timestamp = now_utc_compact()
     retriever_sig = f"R@k{args.top_k}-{emb_alias}"
 
@@ -308,7 +328,7 @@ def main():
         batch_target_document_ids = golden_document_ids[start:end]
 
         # Batch retrieval
-        batch_contexts = [retrieve_documents(q, retriever) for q in batch_user_input]
+        batch_contexts = [retrieve_documents(q, retriever, reranker) for q in batch_user_input]
 
         if retrieval_only:
             batch_texts = [None] * len(batch_user_input)  # explicit null in JSON

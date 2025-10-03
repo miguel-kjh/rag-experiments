@@ -8,7 +8,6 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from ingestion import Ingestion
 from utils import (
     FOLDER_DB,
-    FOLDER_RAW,
     FOLDER_PROCESSED,
     RAGBENCH_SUBSETS
 )
@@ -24,8 +23,8 @@ def create_db_for_ragbench(model_name: str, max_length: int):
         folder_path = os.path.join(FOLDER_DB, f"ragbench-{subset}")
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
-        unique_documents = pickle.load(open(os.path.join(FOLDER_RAW, f"ragbench-{subset}", "unique_documents.pkl"), "rb"))
-        print(f"Loaded {len(unique_documents)} unique documents from {os.path.join(FOLDER_RAW, f'ragbench-{subset}', 'unique_documents.pkl')}")
+        unique_documents = pickle.load(open(os.path.join(FOLDER_PROCESSED, f"ragbench-{subset}", "unique_documents.pkl"), "rb"))
+        print(f"Loaded {len(unique_documents)} unique documents from {os.path.join(FOLDER_PROCESSED, f'ragbench-{subset}', 'unique_documents.pkl')}")
         documents = [
             Document(
                 page_content=doc,
@@ -38,7 +37,7 @@ def create_db_for_ragbench(model_name: str, max_length: int):
         faiss_index = ingestion.ingest()
         name_db = os.path.join(
             folder_path,
-            f"ragbench-{subset}_embeddings_all-mpnet-base-v2"
+            f"ragbench-{subset}_embeddings_{model_name.replace('/', '_')}"
         )
         print(f"Saving FAISS index to {name_db}")
         faiss_index.save_local(name_db)
