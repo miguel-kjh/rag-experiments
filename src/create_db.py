@@ -15,10 +15,11 @@ from utils import (
 )
 
 
-def create_db_for_ragbench(model_name: str):
-    model = HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={"device": "cuda"}
+def create_db_for_ragbench(model_name: str, max_length: int):
+    model = SentenceTransformerEmbeddings(
+        model=model_name,
+        device="cuda",
+        max_length=max_length
     )
     for subset in RAGBENCH_SUBSETS:
         print(f"Creating DB for RAG-Bench subset: {subset}")
@@ -44,10 +45,11 @@ def create_db_for_ragbench(model_name: str):
         print(f"Saving FAISS index to {name_db}")
         faiss_index.save_local(name_db)
 
-def create_db_for_parliament(model_name: str):
-    model = HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={"device": "cuda"}
+def create_db_for_parliament(model_name: str, max_length: int):
+    model = SentenceTransformerEmbeddings(
+        model=model_name,
+        device="cuda",
+        max_length=max_length
     )
     print("Creating DB for Parliament dataset")
     folder_path = os.path.join(FOLDER_DB, "parliament_db")
@@ -79,7 +81,7 @@ DATASETS = {
 
 def main(args: argparse.Namespace):
     if args.dataset in DATASETS:
-        DATASETS[args.dataset](args.model_name)
+        DATASETS[args.dataset](args.model_name, args.max_length)
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
@@ -87,6 +89,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True, help="Path to local dataset (load_from_disk) or Hub dataset ID (load_dataset)")
     parser.add_argument("--model_name", required=True, help="Name of the model to use for embeddings")
+    parser.add_argument("--max_length", type=int, default=8192, help="Maximum length for the model")
     args = parser.parse_args() 
 
     main(args)
