@@ -10,7 +10,7 @@ from datasets import load_from_disk, Dataset
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
-from evaluation import calc_reid_metrics
+from ranking_metrics import calc_ranking_metrics
 from retriever import Retriever, NaiveDenseRetriever, HybridRetriever
 from reranker import Reranker, CrossEncoderReranker
 from embeddings_models import SentenceTransformerEmbeddings
@@ -108,9 +108,9 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Load the model in 8-bit mode.")
 
     # Data
-    p.add_argument("--dataset", default="data/processed/ragbench-covidqa",
+    p.add_argument("--dataset", default="data/processed/parliament_qa",
                    help="Path to the dataset (datasets.load_from_disk).")
-    p.add_argument("--db-path", default="data/db/ragbench-covidqa/ragbench-covidqa_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
+    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2_l2",
                    help="Path to the FAISS index.")
 
     # Retriever type
@@ -368,13 +368,18 @@ def main():
             f.write(json.dumps(records[key], ensure_ascii=False) + "\n")
 
     # Evaluation (ReID)
-    print("Running re-identification evaluation...")
+    print("Running ranking evaluation...")
     preds = [records[k]["document_ids"] for k in sorted(records.keys())]
     refs = [records[k]["target_document_ids"] for k in sorted(records.keys())]
-    metrics = calc_reid_metrics(preds, refs)
-    print("ReID results:")
+    if "parliament" in args.dataset.lower():
+        # Parliament QA has 1 relevant document per query
+        metrics = calc_ranking_metrics(preds, refs, one_relevant_per_query=True)
+    else:
+        # RAG-Bench datasets have multiple relevant documents per query
+        metrics = calc_ranking_metrics(preds, refs, one_relevant_per_query=False)
+    print("Ranking results:")
     print(metrics)
-    with open(os.path.join(folder_output, "reid_results.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(folder_output, "ranking_results.json"), "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
 
 

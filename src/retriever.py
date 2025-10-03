@@ -25,7 +25,7 @@ class NaiveDenseRetriever(Retriever):
     def __init__(self, db: FAISS, top_k: int = 5, search_type: str = "similarity", lambda_mult: float = 0.5):
         
         assert search_type in ["similarity", "mmr"], "search_type must be 'similarity' or 'mmr'(maximal marginal relevance)"
-        assert (search_type == "similarity") or (lambda_mult is not None and 0 <= lambda_mult <= 1), "lambda_mult must be between 0 and 1 when using mmr"
+        assert (search_type == "similarity") or (lambda_mult is not None and 0 <= lambda_mult <= 1), f"lambda_mult must be between 0 and 1 when using mmr, not {lambda_mult}"
         
         super().__init__(db, top_k=top_k)
         self.search_type = search_type

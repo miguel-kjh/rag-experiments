@@ -16,7 +16,7 @@ from ragas.metrics import (
 )
 from langchain_openai import ChatOpenAI
 
-from reid_metrics import calc_reid_metrics
+from src.ranking_metrics import calc_ranking_metrics
 from utils import SEED
 
 
@@ -68,11 +68,11 @@ def run_llm_evaluation(dataset, evaluator_llm):
     return evaluate(dataset=ragas_dataset, metrics=metrics, llm=evaluator_llm)
 
 
-def run_reid_evaluation(dataset):
+def run_ranking_evaluation(dataset, one_relevant_per_query: bool = True) -> Dict:
     """Run re-identification metrics evaluation."""
     preds = [item["document_ids"] for item in dataset]
     gts = [item["target_document_ids"] for item in dataset]
-    return calc_reid_metrics(preds, gts)
+    return calc_ranking_metrics(preds, gts, one_relevant_per_query=one_relevant_per_query)
 
 
 # -----------------------------
@@ -138,8 +138,15 @@ def main():
     # Load dataset
     dataset = load_dataset(generation_path, args.subsample_size)
 
-    # Run ReID evaluation
-    final_result = run_reid_evaluation(dataset)
+    # Run ranking evaluation
+    # TODO: Posiblemente borrar la evaluacion del ranking ya lo hago cuando se generan las respuestas
+    if "parliament" in args.dataset_path.lower():
+        # Parliament QA has 1 relevant document per query
+        one_relevant_per_query = True
+    else:
+        # RAG-Bench datasets have multiple relevant documents per query
+        one_relevant_per_query = False
+    final_result = run_ranking_evaluation(dataset, one_relevant_per_query=one_relevant_per_query)
 
     # Optionally run LLM-based evaluation
     if args.run_llm_evaluation:
