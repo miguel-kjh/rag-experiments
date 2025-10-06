@@ -1,9 +1,13 @@
 from typing import List
 import torch
+import numpy as np
 from abc import ABC, abstractmethod
 from sentence_transformers.cross_encoder import CrossEncoder
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+#semantic chunking
+from langchain_experimental.text_splitter import SemanticChunker
+from langchain_openai import OpenAIEmbeddings
 
 
 class Reranker(ABC):
@@ -44,7 +48,7 @@ class CrossEncoderReranker(Reranker):
 
             pairs = [(query, chunk) for chunk in chunks]
             scores = self.reranker.predict(pairs).tolist()
-            agg_score = max(scores) if scores else 0.0
+            agg_score = np.max(scores) if scores else 0.0
 
             doc_scores.append((doc, agg_score))
 

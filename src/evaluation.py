@@ -3,7 +3,6 @@ import argparse
 import pandas as pd
 from typing import Dict, Optional, Any
 
-from dotenv import load_dotenv
 from ragas import evaluate, EvaluationDataset
 from ragas.metrics import (
     AnswerAccuracy,
@@ -17,16 +16,7 @@ from ragas.metrics import (
 from langchain_openai import ChatOpenAI
 
 from src.ranking_metrics import calc_ranking_metrics
-from utils import SEED
-
-
-# -----------------------------
-# Environment setup
-# -----------------------------
-def setup_environment():
-    """Load environment variables and set the OpenAI API key."""
-    load_dotenv()
-    os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+from utils import SEED, setup_environment
 
 
 # -----------------------------

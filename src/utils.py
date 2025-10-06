@@ -33,6 +33,15 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+# -----------------------------
+# Environment setup
+# -----------------------------
+def setup_environment():
+    """Load environment variables and set the OpenAI API key."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+
 
 def main():
     # create folders if they don't exist

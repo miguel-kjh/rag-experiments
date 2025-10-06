@@ -15,6 +15,7 @@ from ranking_metrics import calc_ranking_metrics
 from retriever import Retriever, NaiveDenseRetriever, HybridRetriever
 from reranker import Reranker, CrossEncoderReranker
 from embeddings_models import SentenceTransformerEmbeddings
+from utils import setup_environment
 from utils import (
     SEED as DEFAULT_SEED,
     SYSTEM_PROMPT,
@@ -163,6 +164,7 @@ def main():
     args = parser.parse_args()
 
     seed_everything(args.seed)
+    setup_environment()
 
     retrieval_only = is_no_model(args.model)
     task = "retrieval" if retrieval_only else "rag"
@@ -178,6 +180,13 @@ def main():
         "db_path": os.path.basename(args.db_path),
         "embedding_model": args.embedding_model,
         "top_k": args.top_k,
+        "similarity_function": args.similarity_function,
+        "lambda_mult": args.lambda_mult,
+        "sparse_retriever": args.sparse_retriever,
+        "alpha": args.alpha,
+        "reranker_model": args.reranker_model,
+        "top_rank": args.top_rank,
+        "use_chunking": args.use_chunking,
         "model": args.model,
         "temperature": args.temperature,
         "max_seq_length": args.max_seq_length,
@@ -265,7 +274,7 @@ def main():
             retriever_sig,
         )
 
-    run_folder_name = f"{timestamp}_{task}_{retriever}_{model_alias}_{expid}"
+    run_folder_name = f"{timestamp}_{task}_{retriever}_{reranker}_{model_alias}_{expid}"
     if args.tag:
         run_folder_name += f"_{slugify(args.tag)}"
 
@@ -303,6 +312,13 @@ def main():
         "embedding_model": args.embedding_model,
         "embedding_alias": emb_alias,
         "top_k": args.top_k,
+        "similarity_function": args.similarity_function,
+        "lambda_mult": args.lambda_mult,
+        "sparse_retriever": args.sparse_retriever,
+        "alpha": args.alpha,
+        "reranker_model": args.reranker_model,
+        "top_rank": args.top_rank,
+        "use_chunking": args.use_chunking,
         "model": args.model,
         "model_alias": model_alias,
         "max_seq_length": args.max_seq_length,
