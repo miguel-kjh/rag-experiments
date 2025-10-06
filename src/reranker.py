@@ -5,9 +5,6 @@ from abc import ABC, abstractmethod
 from sentence_transformers.cross_encoder import CrossEncoder
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-#semantic chunking
-from langchain_experimental.text_splitter import SemanticChunker
-from langchain_openai import OpenAIEmbeddings
 
 
 class Reranker(ABC):
