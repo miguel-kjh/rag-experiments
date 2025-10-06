@@ -157,22 +157,16 @@ def calc_ranking_metrics(
             results[f"Accuracy@{k}"] = cmc_k
             # F1@k multi no tiene forma cerrada simple; si la quieres, calcúlala por query.
 
-    # (Opcional) vista "clasificación" global: precision/recall/f1 sobre sets completos (no ranking)
+    # (Opcional) vista "clasificación" global: accuracy mide si aparece algún relevante en el ranking
     if include_classification_view:
         vals = []
         for p, g in zip(preds_ranked, gts):
-            pred_set, gt_set = set(p), set(g)
-            tp = len(pred_set & gt_set)
-            fp = len(pred_set - gt_set)
-            fn = len(gt_set - pred_set)
-            prec = tp / (tp + fp) if (tp + fp) else 0.0
-            rec  = tp / (tp + fn) if (tp + fn) else 0.0
-            f1   = 2*prec*rec/(prec+rec) if (prec+rec) else 0.0
-            vals.append((prec, rec, f1))
-        if vals:
-            results["classification_precision_macro"] = float(np.mean([v[0] for v in vals]))
-            results["classification_recall_macro"]    = float(np.mean([v[1] for v in vals]))
-            results["classification_f1_macro"]        = float(np.mean([v[2] for v in vals]))
+            p_set = set(p)
+            g_set = set(g)
+            vals.append(1 if p_set & g_set else 0)
+        n = len(vals)
+        accuracy = sum(vals) / n if n > 0 else 0.0
+        results["Accuracy"] = accuracy
 
     return results
 
@@ -221,9 +215,9 @@ if __name__ == "__main__":
     ]
     gts = [
         ["1772"],   # 1772 aparece en preds
-        ["4826"]    # 4825 aparece en preds
+        ["4823"]    # 4826 aparece en preds
     ]
-    print(calc_ranking_metrics(preds, gts, one_relevant_per_query=True))
+    print(calc_ranking_metrics(preds, gts, one_relevant_per_query=True, include_classification_view=True))
 
     print("Caso de prueba 6 (1-relevante, no aparece):")
     preds = [
@@ -234,7 +228,7 @@ if __name__ == "__main__":
         [1771],   # 1771 NO aparece en preds
         [4823]    # 4823 NO aparece en preds
     ]
-    print(calc_ranking_metrics(preds, gts, one_relevant_per_query=True))
+    print(calc_ranking_metrics(preds, gts, one_relevant_per_query=True, include_classification_view=True))
 
 
 

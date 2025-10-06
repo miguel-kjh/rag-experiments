@@ -2,6 +2,7 @@ import os
 import argparse
 import json
 import hashlib
+from tqdm import tqdm
 import re
 from datetime import datetime, timezone
 from typing import Tuple, List, Optional
@@ -134,6 +135,8 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Cross-encoder model for reranking (optional). E.g., 'BAAI/bge-reranker-v2-m3'.")
     p.add_argument("--top-rank", type=int, default=5,
                    help="Number of top documents to keep after reranking.")
+    p.add_argument("--use-chunking", action="store_true", default=False,
+                   help="Whether to use chunking in the reranker (default False).")
 
     # Batch / sampling
     p.add_argument("--batch-size", type=int, default=32,
@@ -244,6 +247,7 @@ def main():
         reranker = CrossEncoderReranker(
             model_name=args.reranker_model,
             top_rank=args.top_rank,
+            use_chunking=args.use_chunking
         )
         print(f"Reranker enabled: {reranker}")
 
@@ -321,7 +325,7 @@ def main():
     records = {}
 
     # Batch loop
-    for start in range(0, n, args.batch_size):
+    for start in tqdm(range(0, n, args.batch_size), desc="Processing batches"):
         end = min(start + args.batch_size, n)
         batch_user_input = questions[start:end]
         batch_reference = golden_response[start:end]
@@ -357,7 +361,7 @@ def main():
                 "response": batch_texts[i],      # None in retrieval-only
                 "reference": batch_reference[i],
             }
-        print(f"Processed {end}/{n} samples.")
+        #print(f"Processed {end}/{n} samples.")
 
     # Save results
     filename = "retrieval.jsonl" if retrieval_only else "generation.jsonl"
@@ -373,10 +377,10 @@ def main():
     refs = [records[k]["target_document_ids"] for k in sorted(records.keys())]
     if "parliament" in args.dataset.lower():
         # Parliament QA has 1 relevant document per query
-        metrics = calc_ranking_metrics(preds, refs, one_relevant_per_query=True)
+        metrics = calc_ranking_metrics(preds, refs, one_relevant_per_query=True, include_classification_view=True)
     else:
         # RAG-Bench datasets have multiple relevant documents per query
-        metrics = calc_ranking_metrics(preds, refs, one_relevant_per_query=False)
+        metrics = calc_ranking_metrics(preds, refs, one_relevant_per_query=False, include_classification_view=True)
     print("Ranking results:")
     print(metrics)
     with open(os.path.join(folder_output, "ranking_results.json"), "w", encoding="utf-8") as f:
