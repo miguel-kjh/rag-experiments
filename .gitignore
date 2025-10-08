@@ -210,3 +210,4 @@ notebooks/faiss_index/
 unsloth_compiled_cache/
 results/
 notebooks/output
+wandb/
