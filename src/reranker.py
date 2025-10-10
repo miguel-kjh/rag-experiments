@@ -66,7 +66,7 @@ if __name__ == "__main__":
         Document(page_content="The capital of France is known for the Eiffel Tower.", metadata={"id": 6}),
     ]
 
-    reranker = CrossEncoderReranker("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", top_rank=1, use_chunking=True)
+    reranker = CrossEncoderReranker("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", top_rank=5, use_chunking=True)
     query = "What is the capital of France?"
     reranked_docs = reranker.rerank(query, docs)
 

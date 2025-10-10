@@ -1,9 +1,6 @@
 import json
 from unsloth import FastLanguageModel
 
-# Carga del modelo instructivo (puedes cambiarlo por otro)
-model_name = "Qwen/Qwen3-1.7B"
-
 
 # =========================
 # SYSTEM PROMPT
@@ -75,13 +72,17 @@ def parse_model_output(output_text: str):
 # EJEMPLO DE USO
 # =========================
 def main():
+    # Carga del modelo instructivo (puedes cambiarlo por otro)
+    model_name = "Qwen/Qwen3-0.6B"  
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name,
         max_seq_length=2048,
     )
     FastLanguageModel.for_inference(model)
-    query = "What are the main causes of climate change?"
-    document = "Climate change is mainly caused by greenhouse gases like CO2 and methane emitted from human activities."
+    query = "Por qué el cambio climático es un problema urgente?"
+    #document = "El cambio climático es un problema urgente debido a sus efectos devastadores en el medio ambiente, la biodiversidad y las comunidades humanas. El aumento de las temperaturas globales provoca fenómenos meteorológicos extremos, como huracanes, incendios forestales e inundaciones, que amenazan la vida y los medios de subsistencia. Además, el cambio climático contribuye a la pérdida de hábitats naturales y especies, afectando la estabilidad de los ecosistemas. La urgencia radica en la necesidad de mitigar estos impactos mediante la reducción de emisiones de gases de efecto invernadero y la adopción de prácticas sostenibles para proteger nuestro planeta para las generaciones futuras."
+    # dame un ejemplo de documento que parezca relevante pero no lo sea
+    document = "El calentamiento global es un fenómeno que se refiere al aumento gradual de las temperaturas promedio de la atmósfera terrestre y los océanos. Este proceso ha sido observado durante las últimas décadas y se atribuye principalmente a la actividad humana, como la quema de combustibles fósiles y la deforestación. El calentamiento global tiene diversas consecuencias, incluyendo el derretimiento de los glaciares, el aumento del nivel del mar y cambios en los patrones climáticos. Aunque el calentamiento global es un tema importante, no aborda directamente la urgencia del cambio climático en términos de sus impactos inmediatos y a largo plazo en el medio ambiente y las sociedades humanas."
 
     input_text = build_prompt(tokenizer, question=query, context=document)
     input_text = input_text.to("cuda")
