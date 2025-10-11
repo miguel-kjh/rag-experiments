@@ -42,7 +42,8 @@ PROMPT = """### Query:
 }}"""
 
 # Retriever and Advanced Filtering Agent
-class rafa(Reranker):
+class Rafa(Reranker):
+    
     def __init__(
             self, 
             model_name: str, 
@@ -50,8 +51,11 @@ class rafa(Reranker):
             max_new_tokens: int = 1024, 
             use_chunking: bool = False,
             batch_size: int = 32,
-            load_in_4bit: bool = False
+            load_in_4bit: bool = False,
+            top_rank: int = 5
         ):
+
+
         super().__init__(model_name)
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
         self._model, self._tokenizer = FastLanguageModel.from_pretrained(
@@ -63,7 +67,7 @@ class rafa(Reranker):
         FastLanguageModel.for_inference(self._model)
 
         self._use_chunking = use_chunking
-        self._top_rank = 5
+        self._top_rank = top_rank
         self._batch_size = batch_size
         self._max_new_tokens = max_new_tokens
 
@@ -97,6 +101,9 @@ class rafa(Reranker):
             tokenize=False,
             enable_thinking=True,
         )
+    
+    def __str__(self):
+        return f"Rafa('{self._model_name}', top_rank={self._top_rank})"
     
     def rerank(self, query: str, docs: list):
         # Implementación específica del reranking
@@ -139,7 +146,7 @@ if __name__ == "__main__":
         Document(page_content="Lisbon is the capital of Portugal.", metadata={"id": 5}),
         Document(page_content="The capital of France is known for the Eiffel Tower.", metadata={"id": 6}),
     ]
-    reranker = rafa("Qwen/Qwen3-1.7B", max_seq_length=2048, use_chunking=False, load_in_4bit=False)
+    reranker = Rafa("Qwen/Qwen3-0.6B", max_seq_length=16000, use_chunking=False, load_in_4bit=False)
     ranked_docs = reranker.rerank("What is the capital of France?", docs)
     for doc, score, reasoning in ranked_docs:
         print(f"Score: {score}, Reasoning: {reasoning}\nDocument: {doc.page_content}\n")

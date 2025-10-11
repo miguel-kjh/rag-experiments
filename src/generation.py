@@ -1,3 +1,4 @@
+from rafa import Rafa
 import os
 import argparse
 import json
@@ -37,8 +38,13 @@ def retrieve_documents(query: str, retriever: Retriever, reranker: Reranker) -> 
 
     if reranker:
         results = reranker.rerank(query, results)
-        results = [doc for doc, score in results]
-
+        if type(reranker) is Rafa:
+            # Rafa returns (doc, score, reasoning)
+            results = [doc for doc, score, reasoning in results]
+        else:
+            # Other rerankers return (doc, score)
+            results = [doc for doc, score in results]
+    
     list_contents = [doc.page_content for doc in results]
     context = "\n".join(list_contents)
     idx = [doc.metadata.get("id", doc.metadata.get("doc_id", None)) for doc in results]
@@ -110,9 +116,9 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Load the model in 8-bit mode.")
 
     # Data
-    p.add_argument("--dataset", default="data/processed/parliament_qa",
+    p.add_argument("--dataset", default="data/processed/ragbench-covidqa",
                    help="Path to the dataset (datasets.load_from_disk).")
-    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
+    p.add_argument("--db-path", default="data/db/ragbench-covidqa/ragbench-covidqa_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
                    help="Path to the FAISS index.")
 
     # Retriever type
@@ -253,11 +259,22 @@ def main():
 
     reranker = None
     if args.reranker_model:
-        reranker = CrossEncoderReranker(
-            model_name=args.reranker_model,
-            top_rank=args.top_rank,
-            use_chunking=args.use_chunking
-        )
+        if args.reranker_model.lower() == "rafa":
+            reranker = Rafa(
+                model_name="Qwen/Qwen3-8B",
+                max_seq_length=8192,
+                max_new_tokens=1024,
+                use_chunking=False,
+                batch_size=args.batch_size,
+                load_in_4bit=args.load_in_4bit,
+                top_rank=args.top_rank
+            )
+        else:
+            reranker = CrossEncoderReranker(
+                model_name=args.reranker_model,
+                top_rank=args.top_rank,
+                use_chunking=args.use_chunking
+            )
         print(f"Reranker enabled: {reranker}")
 
     timestamp = now_utc_compact()
