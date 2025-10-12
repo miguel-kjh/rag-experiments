@@ -261,7 +261,7 @@ def main():
     if args.reranker_model:
         if args.reranker_model.lower() == "rafa":
             reranker = Rafa(
-                model_name="Qwen/Qwen3-8B",
+                model_name="Qwen/Qwen3-0.6B",
                 max_seq_length=8192,
                 max_new_tokens=1024,
                 use_chunking=False,

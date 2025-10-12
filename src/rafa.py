@@ -24,6 +24,11 @@ Use the following scoring criteria:
 You must return a short reasoning and a JSON object with two fields:
 - "reasoning": a brief justification (1–3 sentences) explaining the score.
 - "score": a number between 0 and 1 with two decimals.
+The output must be a valid JSON object. Example:
+{{
+    "reasoning": "The document provides a comprehensive overview of the topic, addressing all key aspects mentioned in the query.",
+    "score": 1.0
+}}
 """
 
 # =========================
@@ -72,7 +77,10 @@ class Rafa(Reranker):
         self._max_new_tokens = max_new_tokens
 
         self._sampling_params = SamplingParams(
-            temperature = 0,
+            temperature=0.6,
+            top_p=0.95,
+            top_k=20,
+            min_p=0.0,
             max_tokens = self._max_new_tokens,
             seed = SEED,
         )
@@ -125,6 +133,7 @@ class Rafa(Reranker):
 
             batch_texts = [out.outputs[0].text for out in batch_outputs]
             for doc, output_text in zip(batch_docs, batch_texts):
+                print(output_text)
                 parsed_output = self._parse_model_output(output_text)
                 score = parsed_output["score"]
                 reasoning = parsed_output["reasoning"]
@@ -146,7 +155,7 @@ if __name__ == "__main__":
         Document(page_content="Lisbon is the capital of Portugal.", metadata={"id": 5}),
         Document(page_content="The capital of France is known for the Eiffel Tower.", metadata={"id": 6}),
     ]
-    reranker = Rafa("Qwen/Qwen3-0.6B", max_seq_length=16000, use_chunking=False, load_in_4bit=False)
+    reranker = Rafa("Qwen/Qwen3-0.6B", max_seq_length=1024, max_new_tokens=512, use_chunking=False, load_in_4bit=False)
     ranked_docs = reranker.rerank("What is the capital of France?", docs)
     for doc, score, reasoning in ranked_docs:
         print(f"Score: {score}, Reasoning: {reasoning}\nDocument: {doc.page_content}\n")
