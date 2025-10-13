@@ -1,10 +1,12 @@
-from rafa import Rafa
 import os
 import argparse
 import json
 import hashlib
 from tqdm import tqdm
 import re
+from unsloth import FastLanguageModel
+from vllm import SamplingParams
+from rafa import Rafa
 from datetime import datetime, timezone
 from typing import Tuple, List, Optional
 
@@ -13,6 +15,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from ranking_metrics import calc_ranking_metrics
+from query_expansion import QueryRewriter, HyDEGenerator
 from retriever import Retriever, NaiveDenseRetriever, HybridRetriever
 from reranker import Reranker, CrossEncoderReranker
 from embeddings_models import SentenceTransformerEmbeddings
@@ -68,6 +71,10 @@ def is_no_model(model_value: Optional[str]) -> bool:
     mv = str(model_value).strip().lower()
     return mv in {"none", "null", ""}
 
+def using_pre_retrieval(expansion_method: str) -> bool:
+    em = expansion_method.strip().lower()
+    return em in {"rewriter", "hyde"}
+
 def slugify(s: str) -> str:
     s = s.strip().lower()
     s = re.sub(r"[^\w\-\.]+", "-", s)
@@ -104,7 +111,7 @@ def get_parser() -> argparse.ArgumentParser:
     # Model / inference
     p.add_argument("--model", default=None,
                    help="Model name to load (HuggingFace/Unsloth). Use None to disable generation.")
-    p.add_argument("--max-seq-length", type=int, default=32000,
+    p.add_argument("--max-seq-length", type=int, default=8192,
                    help="Maximum input sequence length.")
     p.add_argument("--max-generation-length", type=int, default=1024,
                    help="Maximum number of tokens to generate.")
@@ -120,6 +127,14 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Path to the dataset (datasets.load_from_disk).")
     p.add_argument("--db-path", default="data/db/ragbench-covidqa/ragbench-covidqa_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
                    help="Path to the FAISS index.")
+    
+    # Pre-retrieval
+    p.add_argument("--expansion-method", default="none",
+                   help="Query expansion method: 'none', 'rewriter', or 'hyde'.")
+    p.add_argument("--expansion-model", default="Qwen/Qwen3-0.6B",
+                     help="Model name for query expansion (if enabled).")
+    p.add_argument("--expansion-enable-thinking", action="store_true", default=False,
+                   help="Enable chain-of-thought (thinking) in query expansion (default False).")
 
     # Retriever type
     p.add_argument("--retriever-type", default="dense",
@@ -173,6 +188,7 @@ def main():
     setup_environment()
 
     retrieval_only = is_no_model(args.model)
+    using_expansion = using_pre_retrieval(args.expansion_method)
     task = "retrieval" if retrieval_only else "rag"
 
     # Aliases
@@ -207,22 +223,23 @@ def main():
 
     if retrieval_only:
         print("Running in RETRIEVAL-ONLY mode: no LLM will be loaded and no text will be generated.")
-    else:
-        from unsloth import FastLanguageModel
-        from vllm import SamplingParams
-        
+
+    if using_expansion:
         model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name = args.model,
+            model_name = args.expansion_model,
             max_seq_length = args.max_seq_length,
             load_in_4bit = args.load_in_4bit,
             load_in_8bit = args.load_in_8bit,
             fast_inference = args.fast_inference,
         )
-        sampling_params = SamplingParams(
-            temperature = args.temperature,
-            max_tokens = args.max_generation_length,
-            seed = args.seed,
-        )
+        if not retrieval_only:
+            sampling_params = SamplingParams(
+                temperature = args.temperature,
+                max_tokens = args.max_generation_length,
+                seed = args.seed,
+            )
+
+    print("### RAG COMPONENTS ###")
 
     # Vector DB for RAG
     embedding_model = HuggingFaceEmbeddings(
@@ -235,6 +252,25 @@ def main():
         allow_dangerous_deserialization=True,
     )
     print(f"Loaded FAISS index from {args.db_path}")
+
+    # Query Expansion
+    query_expander = None
+    if using_expansion:
+        if args.expansion_method.strip().lower() == "rewriter":
+            query_expander = QueryRewriter(
+                temperature=args.temperature,
+                max_tokens=args.max_generation_length,
+                enable_thinking=args.expansion_enable_thinking,
+            )
+        elif args.expansion_method.strip().lower() == "hyde":
+            query_expander = HyDEGenerator(
+                temperature=args.temperature,
+                max_tokens=args.max_generation_length,
+                enable_thinking=args.expansion_enable_thinking,
+            )
+        else:
+            raise ValueError("expansion-method must be 'none', 'query_rewriter', or 'hyde'")
+        print(f"Using query expansion method: {query_expander}")
 
     # Retriever
     if args.retriever_type == "dense":
@@ -277,6 +313,8 @@ def main():
             )
         print(f"Reranker enabled: {reranker}")
 
+    print("\n### RAG COMPONENTS ###")
+
     timestamp = now_utc_compact()
     retriever_sig = f"R@k{args.top_k}-{emb_alias}"
 
@@ -291,7 +329,7 @@ def main():
             retriever_sig,
         )
 
-    run_folder_name = f"{timestamp}_{task}_{retriever}_{reranker}_{model_alias}_{expid}"
+    run_folder_name = f"{timestamp}_{task}_{query_expander}_{retriever}_{reranker}_{model_alias}_{expid}"
     if args.tag:
         run_folder_name += f"_{slugify(args.tag)}"
 
@@ -326,6 +364,10 @@ def main():
         "dataset_alias": dataset_alias,
         "db_path": args.db_path,
         "db_alias": db_alias,
+        "expansion_method": args.expansion_method,
+        "expansion_model": args.expansion_model,
+        "expansion_enable_thinking": args.expansion_enable_thinking,
+        "using_expansion": using_expansion,
         "embedding_model": args.embedding_model,
         "embedding_alias": emb_alias,
         "top_k": args.top_k,
@@ -361,6 +403,8 @@ def main():
     for start in tqdm(range(0, n, args.batch_size), desc="Processing batches"):
         end = min(start + args.batch_size, n)
         batch_user_input = questions[start:end]
+        if using_expansion: #TODO: quidado porque tanto como el post-retirval como el generation usan la q expandida y eso no es correcto
+            batch_user_input = query_expander.expand(model, tokenizer, batch_user_input)
         batch_reference = golden_response[start:end]
         batch_target_document_ids = golden_document_ids[start:end]
 
