@@ -43,6 +43,23 @@ def setup_environment():
     os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 
 
+# -----------------------------
+# Builder prompts
+# -----------------------------
+def build_prompt_query_expander(tokenizer, system_prompt: str, prompt: str, query: str, enable_thinking: bool = False) -> str:
+    """Builds the chat prompt for a single example using the tokenizer chat template."""
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": prompt.format(query=query)},
+    ]
+    return tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        tokenize=False,
+        enable_thinking=enable_thinking,
+    )
+
+
 def main():
     # create folders if they don't exist
     for folder in [FOLDER_DATA, FOLDER_RAW, FOLDER_PROCESSED, FOLDER_COMBINED, FOLDER_DB]:
