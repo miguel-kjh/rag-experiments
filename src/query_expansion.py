@@ -3,6 +3,8 @@ from vllm import SamplingParams
 
 from utils import build_prompt_query_expander, SEED
 
+#TODO: usar prompts en español para lo del parlamento
+
 QUERY_REWRITER_SYSTEM = """You are QueryRewriter, a retrieval-oriented query reformulator.
 Goal: rewrite user queries to be more specific, disambiguated, and retrieval-friendly without changing intent.
 Rules:
@@ -112,11 +114,10 @@ Rules:
 - Add likely clarifications (who/what/when/where), canonical entity names, versions, units, and time ranges when useful.
 - Prefer concrete nouns and boolean connectors; include alternate names/spellings where relevant.
 - Avoid duplicates and excessive overlap; each query should target a distinct angle.
-Output format (one per line):
+Output format (one per line), using the role tags for all queries:
 [CORE] <query>
 [DECOMP] <query>
-[EXPAND] <query>
-Nothing else."""
+[EXPAND] <query>"""
 
 # Nota: siguiendo tu preferencia, primero va la query y luego la instrucción.
 MULTIQUERY_USER = """Query: {query}
@@ -154,6 +155,7 @@ if __name__ == "__main__":
         "What is the capital of France?",
         "Explain the theory of relativity.",
         "How does photosynthesis work?",
+        "George wants to warm his hands quickly by rubbing them. Which skin surface will produce the most heat?",
         "Cuales son las causas del cambio climatico?",
         "\u00bfQu\u00e9 argumentos expuso el grupo parlamentario que se opuso a la propuesta de modificaci\u00f3n del orden del d\u00eda en la sesi\u00f3n del 26 de septiembre de 2023, que implicaba la convalidaci\u00f3n del decreto relativo al impuesto de sucesiones y donaciones?"
     ]
@@ -182,7 +184,7 @@ if __name__ == "__main__":
         print(f"HyDE Passage {i+1}: {hp}\n")
 
 
-    desc = QueryDescomposition(temperature=0, max_tokens=2048, enable_thinking=True)
+    desc = QueryDescomposition(temperature=0, max_tokens=2048, enable_thinking=False)
     multiqueries = desc.expand(model, tokenizer, queries)
     for i, (q, mq) in enumerate(zip(queries, multiqueries)):
         print(f"Original Query {i+1}: {q}")
