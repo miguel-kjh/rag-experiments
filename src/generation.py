@@ -158,9 +158,9 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Load the model in 8-bit mode.")
 
     # Data
-    p.add_argument("--dataset", default="data/processed/parliament_qa",
+    p.add_argument("--dataset", default="data/processed/ragbench-covidqa",
                    help="Path to the dataset (datasets.load_from_disk).")
-    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
+    p.add_argument("--db-path", default="data/db/ragbench-covidqa/ragbench-covidqa_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
                    help="Path to the FAISS index.")
     
     # Pre-retrieval
