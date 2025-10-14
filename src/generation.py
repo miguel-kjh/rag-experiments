@@ -15,7 +15,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from ranking_metrics import calc_ranking_metrics
-from query_expansion import QueryRewriter, HyDEGenerator
+from query_expansion import QueryDescomposition, QueryRewriter, HyDEGenerator
 from retriever import Retriever, NaiveDenseRetriever, HybridRetriever
 from reranker import Reranker, CrossEncoderReranker
 from embeddings_models import SentenceTransformerEmbeddings
@@ -60,8 +60,25 @@ def retrival_documents_query_expansion(
         reranker: Reranker
     ) -> Tuple[str, List[str], List[str]]:
     """Retrieve top-k relevant documents from the vector index and concatenate contents."""
-    results = retriever.retrieve(query_transformed)
-
+    if isinstance(query_transformed, str):
+        results = retriever.retrieve(query_transformed)
+    elif isinstance(query_transformed, list):
+        results = retriever.retrieve(real_query)  # always include original query
+        for q in query_transformed:
+            res = retriever.retrieve(q)
+            results.extend(res)
+        # quitar duplicados pero mantener orden
+        seen = set()
+        unique_results = []
+        for doc in results:
+            doc_id = doc.metadata.get("id", doc.metadata.get("doc_id", None))
+            if doc_id not in seen:
+                seen.add(doc_id)
+                unique_results.append(doc)
+        results = unique_results
+    else:
+        raise ValueError("Invalid query_transformed type")
+        
     if reranker:
         results = reranker.rerank(real_query, results)
         results = [doc for doc, score in results]
@@ -91,7 +108,7 @@ def is_no_model(model_value: Optional[str]) -> bool:
 
 def using_pre_retrieval(expansion_method: str) -> bool:
     em = expansion_method.strip().lower()
-    return em in {"rewriter", "hyde"}
+    return em in {"rewriter", "hyde", "multiquery"}
 
 def slugify(s: str) -> str:
     s = s.strip().lower()
@@ -291,8 +308,16 @@ def main():
                 enable_thinking=args.expansion_enable_thinking,
                 lang=lang
             )
+        elif args.expansion_method.strip().lower() == "multiquery":
+            query_expander = QueryDescomposition(
+                llm_model=model,
+                tokenizer=tokenizer,
+                sampling_params=sampling_params,
+                enable_thinking=args.expansion_enable_thinking,
+                lang=lang
+            )
         else:
-            raise ValueError("expansion-method must be 'none', 'rewriter', or 'hyde'")
+            raise ValueError("expansion-method must be 'multiquery', 'rewriter', or 'hyde'")
         print(f"Using query expansion method: {query_expander}")
 
     # Retriever
