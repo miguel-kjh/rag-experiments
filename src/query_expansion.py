@@ -38,35 +38,33 @@ Write a single cohesive passage to guide retrieval."""
 
 class QueryExpander(ABC):
 
-    def __init__(self, temperature: float = 0.7, max_tokens: int = 1024, enable_thinking: bool = False):
+    def __init__(self, llm_model, tokenizer, sampling_params, enable_thinking: bool = False):
+        self._llm_model = llm_model
+        self._tokenizer = tokenizer
+        self._sampling_params = sampling_params
         self._enable_thinking = enable_thinking
-        self._sampling_params = SamplingParams(
-            temperature = temperature,
-            max_tokens = max_tokens,
-            seed = SEED,
-        )
 
     def _get_answer(self, text: str) -> str:
         return text.strip().split("\n")[-1].strip()
 
     @abstractmethod
-    def expand(self, llm_model, tokenizer, queries: list[str], lora_request: str =None) -> list[str]:
+    def expand(self, queries: list[str], lora_request: str = None) -> list[str]:
         pass
 
 class QueryRewriter(QueryExpander):
 
-    def __init__(self, temperature: float = 0.7, max_tokens: int = 1024, enable_thinking: bool = False):
-        super().__init__(temperature=temperature, max_tokens=max_tokens, enable_thinking=enable_thinking)
+    def __init__(self, llm_model, tokenizer, sampling_params, enable_thinking: bool = False):
+        super().__init__(llm_model, tokenizer, sampling_params, enable_thinking=enable_thinking)
 
     def __str__(self):
-        return "QueryRewriter"
+        return f"QueryRewriter(model={self._llm_model.model.config._name_or_path}, enable_thinking={self._enable_thinking})"
 
-    def expand(self, llm_model, tokenizer, queries: list[str], lora_request: str = None) -> list[str]:
+    def expand(self, queries: list[str], lora_request: str = None) -> list[str]:
         prompt_list = [
-            build_prompt_query_expander(tokenizer, QUERY_REWRITER_SYSTEM, QUERY_REWRITER_USER, query, enable_thinking=self._enable_thinking) 
+            build_prompt_query_expander(self._tokenizer, QUERY_REWRITER_SYSTEM, QUERY_REWRITER_USER, query, enable_thinking=self._enable_thinking) 
             for query in queries
         ]
-        batch_outputs = llm_model.fast_generate(
+        batch_outputs = self._llm_model.fast_generate(
             prompt_list,
             sampling_params=self._sampling_params,
             lora_request=lora_request,
@@ -79,18 +77,18 @@ class QueryRewriter(QueryExpander):
     
 class HyDEGenerator(QueryExpander):
 
-    def __init__(self, temperature: float = 0.7, max_tokens: int = 256, enable_thinking: bool = False):
-        super().__init__(temperature=temperature, max_tokens=max_tokens, enable_thinking=enable_thinking)
+    def __init__(self, llm_model, tokenizer, sampling_params, enable_thinking: bool = False):
+        super().__init__(llm_model, tokenizer, sampling_params, enable_thinking=enable_thinking)
 
     def __str__(self):
-        return "HyDEGenerator"
+        return f"HyDEGenerator(model={self._llm_model.model.config._name_or_path}, enable_thinking={self._enable_thinking})"
 
-    def expand(self, llm_model, tokenizer, queries: list[str], lora_request: str = None) -> list[str]:
+    def expand(self, queries: list[str], lora_request: str = None) -> list[str]:
         prompt_list = [
-            build_prompt_query_expander(tokenizer, HYDE_SYSTEM, HYDE_USER, query, enable_thinking=self._enable_thinking) 
+            build_prompt_query_expander(self._tokenizer, HYDE_SYSTEM, HYDE_USER, query, enable_thinking=self._enable_thinking) 
             for query in queries
         ]
-        batch_outputs = llm_model.fast_generate(
+        batch_outputs = self._llm_model.fast_generate(
             prompt_list,
             sampling_params=self._sampling_params,
             lora_request=lora_request,
@@ -125,18 +123,18 @@ Generate multiple queries as described, listed one per line with their role tags
     
 class QueryDescomposition(QueryExpander):
 
-    def __init__(self, temperature: float = 0.7, max_tokens: int = 1024, enable_thinking: bool = False):
-        super().__init__(temperature=temperature, max_tokens=max_tokens, enable_thinking=enable_thinking)
-    
+    def __init__(self, llm_model, tokenizer, sampling_params, enable_thinking: bool = False):
+        super().__init__(llm_model, tokenizer, sampling_params, enable_thinking=enable_thinking)
+
     def __str__(self):
-        return "QueryDescomposition"
-    
-    def expand(self, llm_model, tokenizer, queries: list[str], lora_request: str = None) -> list[str]:
+        return f"QueryDescomposition(model={self._llm_model.model.config._name_or_path}, enable_thinking={self._enable_thinking})"
+
+    def expand(self, queries: list[str], lora_request: str = None) -> list[str]:
         prompt_list = [
-            build_prompt_query_expander(tokenizer, MULTIQUERY_SYSTEM, MULTIQUERY_USER, query, enable_thinking=self._enable_thinking) 
+            build_prompt_query_expander(self._tokenizer, MULTIQUERY_SYSTEM, MULTIQUERY_USER, query, enable_thinking=self._enable_thinking) 
             for query in queries
         ]
-        batch_outputs = llm_model.fast_generate(
+        batch_outputs = self._llm_model.fast_generate(
             prompt_list,
             sampling_params=self._sampling_params,
             lora_request=lora_request,
@@ -160,7 +158,7 @@ if __name__ == "__main__":
         "\u00bfQu\u00e9 argumentos expuso el grupo parlamentario que se opuso a la propuesta de modificaci\u00f3n del orden del d\u00eda en la sesi\u00f3n del 26 de septiembre de 2023, que implicaba la convalidaci\u00f3n del decreto relativo al impuesto de sucesiones y donaciones?"
     ]
 
-    model_name = "Qwen/Qwen3-1.7B"
+    model_name = "Qwen/Qwen3-0.6B"
 
         
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -171,21 +169,29 @@ if __name__ == "__main__":
         fast_inference = True,
     )
 
-    qe = QueryRewriter(temperature=0, max_tokens=1024, enable_thinking=True)
-    rewritten_queries = qe.expand(model, tokenizer, queries)
+    sampling_params = SamplingParams(
+        temperature=0,
+        max_tokens=1024,
+        seed=SEED
+    )
+
+    qe = QueryRewriter(model, tokenizer, sampling_params, enable_thinking=True)
+    print(qe)
+    rewritten_queries = qe.expand(queries)
     for i, (q, rq) in enumerate(zip(queries, rewritten_queries)):
         print(f"Original Query {i+1}: {q}")
         print(f"Rewritten Query {i+1}: {rq}\n")
 
-    hyde = HyDEGenerator(temperature=0, max_tokens=1024, enable_thinking=True)
-    hyde_passages = hyde.expand(model, tokenizer, queries)
+    hyde = HyDEGenerator(model, tokenizer, sampling_params, enable_thinking=True)
+    print(hyde)
+    hyde_passages = hyde.expand(queries)
     for i, (q, hp) in enumerate(zip(queries, hyde_passages)):
         print(f"Original Query {i+1}: {q}")
         print(f"HyDE Passage {i+1}: {hp}\n")
 
-
-    desc = QueryDescomposition(temperature=0, max_tokens=2048, enable_thinking=False)
-    multiqueries = desc.expand(model, tokenizer, queries)
+    desc = QueryDescomposition(model, tokenizer, sampling_params, enable_thinking=False)
+    print(desc)
+    multiqueries = desc.expand(queries)
     for i, (q, mq) in enumerate(zip(queries, multiqueries)):
         print(f"Original Query {i+1}: {q}")
         print(f"MultiQuery {i+1}:\n{mq}\n")

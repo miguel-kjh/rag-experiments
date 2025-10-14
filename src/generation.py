@@ -53,6 +53,24 @@ def retrieve_documents(query: str, retriever: Retriever, reranker: Reranker) -> 
     idx = [doc.metadata.get("id", doc.metadata.get("doc_id", None)) for doc in results]
     return context, idx, list_contents
 
+def retrival_documents_query_expansion(
+        real_query: str, 
+        query_transformed: Optional[str|List[str]], 
+        retriever: Retriever, 
+        reranker: Reranker
+    ) -> Tuple[str, List[str], List[str]]:
+    """Retrieve top-k relevant documents from the vector index and concatenate contents."""
+    results = retriever.retrieve(query_transformed)
+
+    if reranker:
+        results = reranker.rerank(real_query, results)
+        results = [doc for doc, score in results]
+    
+    list_contents = [doc.page_content for doc in results]
+    context = "\n".join(list_contents)
+    idx = [doc.metadata.get("id", doc.metadata.get("doc_id", None)) for doc in results]
+    return context, idx, list_contents
+
 def build_prompt(tokenizer, question: str, context: str) -> str:
     """Builds the chat prompt for a single example using the tokenizer chat template."""
     messages = [
@@ -123,9 +141,9 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Load the model in 8-bit mode.")
 
     # Data
-    p.add_argument("--dataset", default="data/processed/ragbench-covidqa",
+    p.add_argument("--dataset", default="data/processed/parliament_qa",
                    help="Path to the dataset (datasets.load_from_disk).")
-    p.add_argument("--db-path", default="data/db/ragbench-covidqa/ragbench-covidqa_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
+    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
                    help="Path to the FAISS index.")
     
     # Pre-retrieval
@@ -403,13 +421,16 @@ def main():
     for start in tqdm(range(0, n, args.batch_size), desc="Processing batches"):
         end = min(start + args.batch_size, n)
         batch_user_input = questions[start:end]
-        if using_expansion: #TODO: quidado porque tanto como el post-retirval como el generation usan la q expandida y eso no es correcto
-            batch_user_input = query_expander.expand(model, tokenizer, batch_user_input)
         batch_reference = golden_response[start:end]
         batch_target_document_ids = golden_document_ids[start:end]
 
         # Batch retrieval
-        batch_contexts = [retrieve_documents(q, retriever, reranker) for q in batch_user_input]
+        
+        if using_expansion:
+            batch_user_input_expanded = query_expander.expand(model, tokenizer, batch_user_input)
+            batch_contexts = [retrival_documents_query_expansion(q, qe, retriever, reranker) for q, qe in zip(batch_user_input, batch_user_input_expanded)]
+        else:
+            batch_contexts = [retrieve_documents(q, retriever, reranker) for q in batch_user_input]
 
         if retrieval_only:
             batch_texts = [None] * len(batch_user_input)  # explicit null in JSON
