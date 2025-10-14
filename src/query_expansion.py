@@ -1,48 +1,18 @@
 from abc import ABC, abstractmethod
 from vllm import SamplingParams
+from prompts.prompt_factory import PromptFactory
 
 from utils import build_prompt_query_expander, SEED
 
-#TODO: usar prompts en español para lo del parlamento
-
-QUERY_REWRITER_SYSTEM = """You are QueryRewriter, a retrieval-oriented query reformulator.
-Goal: rewrite user queries to be more specific, disambiguated, and retrieval-friendly without changing intent.
-Rules:
-- Keep the original language of the query.
-- Expand abbreviations, resolve pronouns, and add likely constraints (who/what/when/where).
-- Prefer concrete nouns, canonical entity names, synonyms, and alternate spellings.
-- Add time ranges, units, versions, and boolean connectors if useful.
-- Do not invent facts or private data; do not add speculative numbers.
-- Remove fluff (greetings, meta).
-Output: only the rewritten query (one line, no extra text)."""
-
-QUERY_REWRITER_USER = """Query: {query}
-Rewrite this query to be more specific and detailed for document retrieval."""
-
-
-HYDE_SYSTEM = """You are HyDEGenerator, an expert writer who creates hypothetical answers to guide semantic retrieval.
-Goal: write a concise, high-quality passage that a good source could contain, to maximize embedding and retrieval quality.
-Style: neutral, factual tone; domain terminology; cohesive paragraph(s).
-Constraints:
-- Keep the input language.
-- No fabricated stats, quotes, or citations (“[1]”, DOI, exact numbers) unless clearly generic.
-- Prefer definitions, mechanisms, brief lists, and contextual cues (approximate dates, canonical names).
-- Length: 100–500 words.
-- Do not reveal reasoning steps or meta information (no “I think”, no “as an AI”).
-Output: only the passage."""
-
-HYDE_USER = """Imagine you are an expert writing a detailed explanation on: {query}
-Write a single cohesive passage to guide retrieval."""
-
-
-
 class QueryExpander(ABC):
 
-    def __init__(self, llm_model, tokenizer, sampling_params, enable_thinking: bool = False):
+    def __init__(self, llm_model, tokenizer, sampling_params, lang: str, enable_thinking: bool = False):
         self._llm_model = llm_model
         self._tokenizer = tokenizer
         self._sampling_params = sampling_params
         self._enable_thinking = enable_thinking
+        self._lang = lang
+        self._prompt_factory = PromptFactory()
 
     def _get_answer(self, text: str) -> str:
         return text.strip().split("\n")[-1].strip()
@@ -53,15 +23,16 @@ class QueryExpander(ABC):
 
 class QueryRewriter(QueryExpander):
 
-    def __init__(self, llm_model, tokenizer, sampling_params, enable_thinking: bool = False):
-        super().__init__(llm_model, tokenizer, sampling_params, enable_thinking=enable_thinking)
+    def __init__(self, llm_model, tokenizer, sampling_params, lang: str, enable_thinking: bool = False):
+        super().__init__(llm_model, tokenizer, sampling_params, lang=lang, enable_thinking=enable_thinking)
+        self._system, self._user = self._prompt_factory.get_prompts("query_rewriter", lang=self._lang)
 
     def __str__(self):
         return f"QueryRewriter(model={self._llm_model.model.config._name_or_path}, enable_thinking={self._enable_thinking})"
 
     def expand(self, queries: list[str], lora_request: str = None) -> list[str]:
         prompt_list = [
-            build_prompt_query_expander(self._tokenizer, QUERY_REWRITER_SYSTEM, QUERY_REWRITER_USER, query, enable_thinking=self._enable_thinking) 
+            build_prompt_query_expander(self._tokenizer, self._system, self._user, query, enable_thinking=self._enable_thinking) 
             for query in queries
         ]
         batch_outputs = self._llm_model.fast_generate(
@@ -77,15 +48,16 @@ class QueryRewriter(QueryExpander):
     
 class HyDEGenerator(QueryExpander):
 
-    def __init__(self, llm_model, tokenizer, sampling_params, enable_thinking: bool = False):
-        super().__init__(llm_model, tokenizer, sampling_params, enable_thinking=enable_thinking)
+    def __init__(self, llm_model, tokenizer, sampling_params, lang: str, enable_thinking: bool = False):
+        super().__init__(llm_model, tokenizer, sampling_params, lang=lang, enable_thinking=enable_thinking)
+        self._system, self._user = self._prompt_factory.get_prompts("hyde", lang=self._lang)
 
     def __str__(self):
         return f"HyDEGenerator(model={self._llm_model.model.config._name_or_path}, enable_thinking={self._enable_thinking})"
 
     def expand(self, queries: list[str], lora_request: str = None) -> list[str]:
         prompt_list = [
-            build_prompt_query_expander(self._tokenizer, HYDE_SYSTEM, HYDE_USER, query, enable_thinking=self._enable_thinking) 
+            build_prompt_query_expander(self._tokenizer, self._system, self._user, query, enable_thinking=self._enable_thinking) 
             for query in queries
         ]
         batch_outputs = self._llm_model.fast_generate(
@@ -94,44 +66,24 @@ class HyDEGenerator(QueryExpander):
             lora_request=lora_request,
         )
         if self._enable_thinking:
-            hypothetical_passages = [q + self._get_answer(out.outputs[0].text) for out, q in zip(batch_outputs, queries)]
+            hypothetical_passages = [q + " " + self._get_answer(out.outputs[0].text) for out, q in zip(batch_outputs, queries)]
         else:
-            hypothetical_passages = [q + out.outputs[0].text for out, q in zip(batch_outputs, queries)]
+            hypothetical_passages = [q + " " + out.outputs[0].text for out, q in zip(batch_outputs, queries)]
         return hypothetical_passages
-    
-
-MULTIQUERY_SYSTEM = """You are MultiQuery, a query decomposition and expansion planner for information retrieval.
-Goal: from a single user query, generate multiple targeted queries to maximize recall and coverage.
-Roles:
-- CORE: one rewritten canonical query that preserves intent and is highly retrieval-friendly.
-- DECOMP: 2–5 sub-queries that break the task into narrower, complementary aspects.
-- EXPAND: 2–5 supporting queries (synonyms, alternate spellings, related entities, acronyms expanded, adjacent topics likely co-mentioned).
-Rules:
-- Keep the original language of the input.
-- Do not change the intent; do not invent facts or specific numbers.
-- Add likely clarifications (who/what/when/where), canonical entity names, versions, units, and time ranges when useful.
-- Prefer concrete nouns and boolean connectors; include alternate names/spellings where relevant.
-- Avoid duplicates and excessive overlap; each query should target a distinct angle.
-Output format (one per line), using the role tags for all queries:
-[CORE] <query>
-[DECOMP] <query>
-[EXPAND] <query>"""
-
-# Nota: siguiendo tu preferencia, primero va la query y luego la instrucción.
-MULTIQUERY_USER = """Query: {query}
-Generate multiple queries as described, listed one per line with their role tags."""
     
 class QueryDescomposition(QueryExpander):
 
-    def __init__(self, llm_model, tokenizer, sampling_params, enable_thinking: bool = False):
-        super().__init__(llm_model, tokenizer, sampling_params, enable_thinking=enable_thinking)
+    def __init__(self, llm_model, tokenizer, sampling_params, lang: str, enable_thinking: bool = False):
+        super().__init__(llm_model, tokenizer, sampling_params, lang=lang, enable_thinking=enable_thinking)
+        self._system, self._user = self._prompt_factory.get_prompts("multiquery", lang=self._lang)
 
     def __str__(self):
         return f"QueryDescomposition(model={self._llm_model.model.config._name_or_path}, enable_thinking={self._enable_thinking})"
 
     def expand(self, queries: list[str], lora_request: str = None) -> list[str]:
+
         prompt_list = [
-            build_prompt_query_expander(self._tokenizer, MULTIQUERY_SYSTEM, MULTIQUERY_USER, query, enable_thinking=self._enable_thinking) 
+            build_prompt_query_expander(self._tokenizer, self._system, self._user, query, enable_thinking=self._enable_thinking) 
             for query in queries
         ]
         batch_outputs = self._llm_model.fast_generate(
@@ -159,6 +111,7 @@ if __name__ == "__main__":
     ]
 
     model_name = "Qwen/Qwen3-0.6B"
+    lang = "es"  # "en" or "es"
 
         
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -175,21 +128,21 @@ if __name__ == "__main__":
         seed=SEED
     )
 
-    qe = QueryRewriter(model, tokenizer, sampling_params, enable_thinking=True)
+    qe = QueryRewriter(model, tokenizer, sampling_params, lang=lang, enable_thinking=True)
     print(qe)
     rewritten_queries = qe.expand(queries)
     for i, (q, rq) in enumerate(zip(queries, rewritten_queries)):
         print(f"Original Query {i+1}: {q}")
         print(f"Rewritten Query {i+1}: {rq}\n")
 
-    hyde = HyDEGenerator(model, tokenizer, sampling_params, enable_thinking=True)
+    hyde = HyDEGenerator(model, tokenizer, sampling_params, lang=lang, enable_thinking=True)
     print(hyde)
     hyde_passages = hyde.expand(queries)
     for i, (q, hp) in enumerate(zip(queries, hyde_passages)):
         print(f"Original Query {i+1}: {q}")
         print(f"HyDE Passage {i+1}: {hp}\n")
 
-    desc = QueryDescomposition(model, tokenizer, sampling_params, enable_thinking=False)
+    desc = QueryDescomposition(model, tokenizer, sampling_params, lang=lang, enable_thinking=True)
     print(desc)
     multiqueries = desc.expand(queries)
     for i, (q, mq) in enumerate(zip(queries, multiqueries)):
