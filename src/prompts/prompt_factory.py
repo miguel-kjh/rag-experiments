@@ -27,6 +27,6 @@ class PromptFactory:
 
 if __name__ == "__main__":
     pf = PromptFactory()
-    system, user = pf.get_prompts("query_rewriter", lang="es", query="¿Qué es la inteligencia artificial?")
+    system, user = pf.get_prompts("multiquery", lang="es")
     print("System Prompt:\n", system)
     print("\nUser Prompt:\n", user)

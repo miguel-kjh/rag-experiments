@@ -250,12 +250,12 @@ def main():
             load_in_8bit = args.load_in_8bit,
             fast_inference = args.fast_inference,
         )
-        if not retrieval_only:
-            sampling_params = SamplingParams(
-                temperature = args.temperature,
-                max_tokens = args.max_generation_length,
-                seed = args.seed,
-            )
+
+        sampling_params = SamplingParams(
+            temperature = args.temperature,
+            max_tokens = args.max_generation_length,
+            seed = args.seed,
+        )
 
     print("### RAG COMPONENTS ###")
 
@@ -274,20 +274,25 @@ def main():
     # Query Expansion
     query_expander = None
     if using_expansion:
+        lang = "es" if "parliament" in dataset_alias else "en"
         if args.expansion_method.strip().lower() == "rewriter":
             query_expander = QueryRewriter(
-                temperature=args.temperature,
-                max_tokens=args.max_generation_length,
+                llm_model=model,
+                tokenizer=tokenizer,
+                sampling_params=sampling_params,
                 enable_thinking=args.expansion_enable_thinking,
+                lang=lang
             )
         elif args.expansion_method.strip().lower() == "hyde":
             query_expander = HyDEGenerator(
-                temperature=args.temperature,
-                max_tokens=args.max_generation_length,
+                llm_model=model,
+                tokenizer=tokenizer,
+                sampling_params=sampling_params,
                 enable_thinking=args.expansion_enable_thinking,
+                lang=lang
             )
         else:
-            raise ValueError("expansion-method must be 'none', 'query_rewriter', or 'hyde'")
+            raise ValueError("expansion-method must be 'none', 'rewriter', or 'hyde'")
         print(f"Using query expansion method: {query_expander}")
 
     # Retriever
@@ -427,7 +432,7 @@ def main():
         # Batch retrieval
         
         if using_expansion:
-            batch_user_input_expanded = query_expander.expand(model, tokenizer, batch_user_input)
+            batch_user_input_expanded = query_expander.expand(batch_user_input)
             batch_contexts = [retrival_documents_query_expansion(q, qe, retriever, reranker) for q, qe in zip(batch_user_input, batch_user_input_expanded)]
         else:
             batch_contexts = [retrieve_documents(q, retriever, reranker) for q in batch_user_input]

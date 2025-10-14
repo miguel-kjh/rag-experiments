@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import re
 from vllm import SamplingParams
 from prompts.prompt_factory import PromptFactory
 
@@ -77,10 +78,16 @@ class QueryDescomposition(QueryExpander):
         super().__init__(llm_model, tokenizer, sampling_params, lang=lang, enable_thinking=enable_thinking)
         self._system, self._user = self._prompt_factory.get_prompts("multiquery", lang=self._lang)
 
+    def _parse_multiquery_output(self, text: str):
+        pattern = r'^\[(?:CORE|DECOMP|EXPAND)\]\s*(.+)$'
+        queries = re.findall(pattern, text, flags=re.MULTILINE)
+        queries = [q.strip() for q in queries if q.strip()]
+        return queries
+
     def __str__(self):
         return f"QueryDescomposition(model={self._llm_model.model.config._name_or_path}, enable_thinking={self._enable_thinking})"
 
-    def expand(self, queries: list[str], lora_request: str = None) -> list[str]:
+    def expand(self, queries: list[str], lora_request: str = None) -> list[list[str]]:
 
         prompt_list = [
             build_prompt_query_expander(self._tokenizer, self._system, self._user, query, enable_thinking=self._enable_thinking) 
@@ -92,9 +99,15 @@ class QueryDescomposition(QueryExpander):
             lora_request=lora_request,
         )
         if self._enable_thinking:
-            multiqueries = [self._get_answer(out.outputs[0].text) for out in batch_outputs]
+            multiqueries = [
+                self._parse_multiquery_output(self._get_answer(out.outputs[0].text))
+                for out in batch_outputs
+            ]
         else:
-            multiqueries = [out.outputs[0].text for out in batch_outputs]
+            multiqueries = [
+                self._parse_multiquery_output(out.outputs[0].text) 
+                for out in batch_outputs
+            ]
         return multiqueries
 
 
@@ -110,7 +123,7 @@ if __name__ == "__main__":
         "\u00bfQu\u00e9 argumentos expuso el grupo parlamentario que se opuso a la propuesta de modificaci\u00f3n del orden del d\u00eda en la sesi\u00f3n del 26 de septiembre de 2023, que implicaba la convalidaci\u00f3n del decreto relativo al impuesto de sucesiones y donaciones?"
     ]
 
-    model_name = "Qwen/Qwen3-0.6B"
+    model_name = "Qwen/Qwen3-1.7B"
     lang = "es"  # "en" or "es"
 
         
@@ -123,26 +136,26 @@ if __name__ == "__main__":
     )
 
     sampling_params = SamplingParams(
-        temperature=0,
+        temperature=0.7,
         max_tokens=1024,
         seed=SEED
     )
 
-    qe = QueryRewriter(model, tokenizer, sampling_params, lang=lang, enable_thinking=True)
+    """qe = QueryRewriter(model, tokenizer, sampling_params, lang=lang, enable_thinking=False)
     print(qe)
     rewritten_queries = qe.expand(queries)
     for i, (q, rq) in enumerate(zip(queries, rewritten_queries)):
         print(f"Original Query {i+1}: {q}")
         print(f"Rewritten Query {i+1}: {rq}\n")
 
-    hyde = HyDEGenerator(model, tokenizer, sampling_params, lang=lang, enable_thinking=True)
+    hyde = HyDEGenerator(model, tokenizer, sampling_params, lang=lang, enable_thinking=False)
     print(hyde)
     hyde_passages = hyde.expand(queries)
     for i, (q, hp) in enumerate(zip(queries, hyde_passages)):
         print(f"Original Query {i+1}: {q}")
-        print(f"HyDE Passage {i+1}: {hp}\n")
+        print(f"HyDE Passage {i+1}: {hp}\n")"""
 
-    desc = QueryDescomposition(model, tokenizer, sampling_params, lang=lang, enable_thinking=True)
+    desc = QueryDescomposition(model, tokenizer, sampling_params, lang=lang, enable_thinking=False)
     print(desc)
     multiqueries = desc.expand(queries)
     for i, (q, mq) in enumerate(zip(queries, multiqueries)):
