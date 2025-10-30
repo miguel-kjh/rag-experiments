@@ -123,7 +123,7 @@ if __name__ == "__main__":
         "\u00bfQu\u00e9 argumentos expuso el grupo parlamentario que se opuso a la propuesta de modificaci\u00f3n del orden del d\u00eda en la sesi\u00f3n del 26 de septiembre de 2023, que implicaba la convalidaci\u00f3n del decreto relativo al impuesto de sucesiones y donaciones?"
     ]
 
-    model_name = "Qwen/Qwen3-1.7B"
+    model_name = "meta-llama/Llama-3.2-3B-Instruct"
     lang = "es"  # "en" or "es"
 
         

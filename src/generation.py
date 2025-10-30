@@ -61,6 +61,7 @@ def retrival_documents_query_expansion(
     ) -> Tuple[str, List[str], List[str]]:
     """Retrieve top-k relevant documents from the vector index and concatenate contents."""
     if isinstance(query_transformed, str):
+        print(f"Retrieving documents for query: {query_transformed}")
         results = retriever.retrieve(query_transformed)
     elif isinstance(query_transformed, list):
         results = retriever.retrieve(real_query)  # always include original query
@@ -158,15 +159,15 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Load the model in 8-bit mode.")
 
     # Data
-    p.add_argument("--dataset", default="data/processed/ragbench-covidqa",
+    p.add_argument("--dataset", default="data/processed/parliament_qa",
                    help="Path to the dataset (datasets.load_from_disk).")
-    p.add_argument("--db-path", default="data/db/ragbench-covidqa/ragbench-covidqa_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
+    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
                    help="Path to the FAISS index.")
     
     # Pre-retrieval
     p.add_argument("--expansion-method", default="none",
                    help="Query expansion method: 'none', 'rewriter', or 'hyde'.")
-    p.add_argument("--expansion-model", default="Qwen/Qwen3-0.6B",
+    p.add_argument("--expansion-model", default="meta-llama/Llama-3.2-1B-Instruct",
                      help="Model name for query expansion (if enabled).")
     p.add_argument("--expansion-enable-thinking", action="store_true", default=False,
                    help="Enable chain-of-thought (thinking) in query expansion (default False).")
@@ -180,7 +181,7 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Number of documents to retrieve per query.")
     p.add_argument("--similarity_function", default="similarity",
                    help="Similarity function to use (similarity or mmr).")
-    p.add_argument("--lambda-mult", type=float, default=None,
+    p.add_argument("--lambda-mult", type=float, default=0.7,
                    help="Lambda multiplier for MMR (if using mmr).")
     p.add_argument("--sparse-retriever", default="bm25",
                    help="If retriever-type is 'hybrid', choose sparse retriever: 'bm25' or 'tfidf'.")
@@ -259,21 +260,6 @@ def main():
     if retrieval_only:
         print("Running in RETRIEVAL-ONLY mode: no LLM will be loaded and no text will be generated.")
 
-    if using_expansion:
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name = args.expansion_model,
-            max_seq_length = args.max_seq_length,
-            load_in_4bit = args.load_in_4bit,
-            load_in_8bit = args.load_in_8bit,
-            fast_inference = args.fast_inference,
-        )
-
-        sampling_params = SamplingParams(
-            temperature = args.temperature,
-            max_tokens = args.max_generation_length,
-            seed = args.seed,
-        )
-
     print("### RAG COMPONENTS ###")
 
     # Vector DB for RAG
@@ -287,6 +273,21 @@ def main():
         allow_dangerous_deserialization=True,
     )
     print(f"Loaded FAISS index from {args.db_path}")
+
+    if using_expansion:
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name = args.expansion_model,
+            max_seq_length = args.max_seq_length,
+            load_in_4bit = args.load_in_4bit,
+            load_in_8bit = args.load_in_8bit,
+            fast_inference = True,
+        )
+
+        sampling_params = SamplingParams(
+            temperature = args.temperature,
+            max_tokens = args.max_generation_length,
+            seed = args.seed,
+        )
 
     # Query Expansion
     query_expander = None
@@ -343,22 +344,11 @@ def main():
 
     reranker = None
     if args.reranker_model:
-        if args.reranker_model.lower() == "rafa":
-            reranker = Rafa(
-                model_name="Qwen/Qwen3-0.6B",
-                max_seq_length=8192,
-                max_new_tokens=1024,
-                use_chunking=False,
-                batch_size=args.batch_size,
-                load_in_4bit=args.load_in_4bit,
-                top_rank=args.top_rank
-            )
-        else:
-            reranker = CrossEncoderReranker(
-                model_name=args.reranker_model,
-                top_rank=args.top_rank,
-                use_chunking=args.use_chunking
-            )
+        reranker = CrossEncoderReranker(
+            model_name=args.reranker_model,
+            top_rank=args.top_rank,
+            use_chunking=args.use_chunking
+        )
         print(f"Reranker enabled: {reranker}")
 
     print("\n### RAG COMPONENTS ###")

@@ -94,7 +94,7 @@ def _recall_at_k_single_multi(pred_ranked: Sequence, gt: Sequence, k: int) -> fl
 def calc_ranking_metrics(
     preds_ranked: List[Sequence],
     gts: List[Sequence],
-    ks: Iterable[int] = (1, 2, 3, 5, 10),
+    ks: Iterable[int] = (1, 5, 10, 20, 100),
     one_relevant_per_query: bool = False,  # True: modo 1-relevante (RAG); False: multi-relevante estándar
     include_classification_view: bool = False,  # opcional: precisión/recall/f1 estilo clasificación (no ranking)
 ) -> Dict:

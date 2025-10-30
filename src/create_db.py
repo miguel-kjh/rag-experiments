@@ -15,7 +15,7 @@ from utils import (
 )
 
 
-def create_db_for_ragbench(model_name: str, max_length: int, batch_size: int = 16):
+def create_db_for_ragbench(model_name: str, max_length: int, batch_size: int = 16, using_chunking: bool = False):
     model = HuggingFaceEmbeddings(
         model_name=model_name,
         model_kwargs={"device": "cuda"}
@@ -44,7 +44,7 @@ def create_db_for_ragbench(model_name: str, max_length: int, batch_size: int = 1
         print(f"Saving FAISS index to {name_db}")
         faiss_index.save_local(name_db)
 
-def create_db_for_parliament(model_name: str, max_length: int, batch_size: int = 16):
+def create_db_for_parliament(model_name: str, max_length: int, batch_size: int = 16, using_chunking: bool = False):
     model = HuggingFaceEmbeddings(
         model_name=model_name,
         model_kwargs={"device": "cuda"}
@@ -55,24 +55,39 @@ def create_db_for_parliament(model_name: str, max_length: int, batch_size: int =
         chunk_overlap=0
     )
 
-    print("Creating DB for Parliament dataset")
+    print("Creating DB for Parliament dataset") 
     folder_path = os.path.join(FOLDER_DB, "parliament_db")
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     db_documents_data = load_from_disk(os.path.join(FOLDER_PROCESSED, "parliament_all_docs"))
-    documents = [
-        Document(
-            page_content=text_splitter.split_text(doc["text"])[0],
-            metadata={
-                "id": doc["PK"],
-            }
-        ) for doc in db_documents_data["all"]
-    ]
+    documents = []
+
+    for doc in db_documents_data["all"]:
+        chunks = text_splitter.split_text(doc["text"])
+        if using_chunking:
+            for chunk in chunks:
+                documents.append(Document(
+                    page_content=chunk,
+                    metadata={
+                        "id": doc["PK"],
+                    }
+                ))
+        else:
+            documents.append(Document(
+                page_content=chunks[0],
+                metadata={
+                    "id": doc["PK"],
+                }
+            ))
+
+    
     ingestion = Ingestion(documents=documents, embeddings=model, batch_size=batch_size)
     faiss_index = ingestion.ingest()
+    using_chunking_str = "_chunked" if using_chunking else ""
+    max_length_str = f"_max_length-{max_length}"
     name_db = os.path.join(
         folder_path,
-        f"parliament_all_docs_embeddings_{model_name.replace('/', '_')}"
+        f"parliament_all_docs_embeddings_{model_name.replace('/', '_')}{using_chunking_str}{max_length_str}"
     )
     print(f"Saving FAISS index to {name_db}")
     faiss_index.save_local(name_db)
@@ -85,7 +100,7 @@ DATASETS = {
 
 def main(args: argparse.Namespace):
     if args.dataset in DATASETS:
-        DATASETS[args.dataset](args.model_name, args.max_length)
+        DATASETS[args.dataset](args.model_name, args.max_length, args.batch_size, args.using_chunking)
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
@@ -95,6 +110,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_name", required=True, help="Name of the model to use for embeddings")
     parser.add_argument("--max_length", type=int, default=1024, help="Maximum length for the model")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size for processing")
+    parser.add_argument("--using_chunking", action="store_true", default=False, help="Whether to use chunking for long documents")
     args = parser.parse_args() 
 
     main(args)
