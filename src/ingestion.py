@@ -10,9 +10,10 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.docstore.in_memory import InMemoryDocstore
 
 class Ingestion:
-    def __init__(self, documents: List[str], embeddings: Embeddings):
+    def __init__(self, documents: List[str], embeddings: Embeddings, batch_size: int = 32):
         self.documents  = documents
         self.embeddings = embeddings
+        self.batch_size = batch_size
 
     def _build_faiss_with_progress(self, docs, embedding_model, batch_size=32, normalize=True):
         texts = [d.page_content for d in docs]
@@ -53,4 +54,5 @@ class Ingestion:
         return self._build_faiss_with_progress(
             self.documents, 
             self.embeddings,
+            batch_size=self.batch_size
         )

@@ -5,6 +5,8 @@ from langchain_core.documents import Document
 import pickle
 
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import TokenTextSplitter
+from transformers import AutoTokenizer
 from ingestion import Ingestion
 from utils import (
     FOLDER_DB,
@@ -13,7 +15,7 @@ from utils import (
 )
 
 
-def create_db_for_ragbench(model_name: str, max_length: int):
+def create_db_for_ragbench(model_name: str, max_length: int, batch_size: int = 16):
     model = HuggingFaceEmbeddings(
         model_name=model_name,
         model_kwargs={"device": "cuda"}
@@ -33,7 +35,7 @@ def create_db_for_ragbench(model_name: str, max_length: int):
                 }
             ) for id, doc in enumerate(unique_documents)
         ]
-        ingestion = Ingestion(documents=documents, embeddings=model)
+        ingestion = Ingestion(documents=documents, embeddings=model, batch_size=batch_size)
         faiss_index = ingestion.ingest()
         name_db = os.path.join(
             folder_path,
@@ -42,11 +44,17 @@ def create_db_for_ragbench(model_name: str, max_length: int):
         print(f"Saving FAISS index to {name_db}")
         faiss_index.save_local(name_db)
 
-def create_db_for_parliament(model_name: str, max_length: int):
+def create_db_for_parliament(model_name: str, max_length: int, batch_size: int = 16):
     model = HuggingFaceEmbeddings(
         model_name=model_name,
         model_kwargs={"device": "cuda"}
     )
+    
+    text_splitter = TokenTextSplitter(
+        chunk_size=max_length, 
+        chunk_overlap=0
+    )
+
     print("Creating DB for Parliament dataset")
     folder_path = os.path.join(FOLDER_DB, "parliament_db")
     if not os.path.exists(folder_path):
@@ -54,13 +62,13 @@ def create_db_for_parliament(model_name: str, max_length: int):
     db_documents_data = load_from_disk(os.path.join(FOLDER_PROCESSED, "parliament_all_docs"))
     documents = [
         Document(
-            page_content=doc["text"],
+            page_content=text_splitter.split_text(doc["text"])[0],
             metadata={
                 "id": doc["PK"],
             }
         ) for doc in db_documents_data["all"]
     ]
-    ingestion = Ingestion(documents=documents, embeddings=model)
+    ingestion = Ingestion(documents=documents, embeddings=model, batch_size=batch_size)
     faiss_index = ingestion.ingest()
     name_db = os.path.join(
         folder_path,
@@ -85,7 +93,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True, help="Path to local dataset (load_from_disk) or Hub dataset ID (load_dataset)")
     parser.add_argument("--model_name", required=True, help="Name of the model to use for embeddings")
-    parser.add_argument("--max_length", type=int, default=8192, help="Maximum length for the model")
+    parser.add_argument("--max_length", type=int, default=1024, help="Maximum length for the model")
+    parser.add_argument("--batch_size", type=int, default=16, help="Batch size for processing")
     args = parser.parse_args() 
 
     main(args)
