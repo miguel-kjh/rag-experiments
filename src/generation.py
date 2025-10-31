@@ -161,7 +161,7 @@ def get_parser() -> argparse.ArgumentParser:
     # Data
     p.add_argument("--dataset", default="data/processed/parliament_qa",
                    help="Path to the dataset (datasets.load_from_disk).")
-    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_sentence-transformers_paraphrase-multilingual-mpnet-base-v2",
+    p.add_argument("--db-path", default="data/db/parliament_db/parliament_all_docs_embeddings_Qwen_Qwen3-Embedding-0.6B_chunked_max_length-512",
                    help="Path to the FAISS index.")
     
     # Pre-retrieval
@@ -175,7 +175,7 @@ def get_parser() -> argparse.ArgumentParser:
     # Retriever type
     p.add_argument("--retriever-type", default="dense",
                    help="Type of retriever to use: 'dense' or 'hybrid'.")
-    p.add_argument("--embedding-model", default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+    p.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-0.6B",
                    help="Embedding model used for FAISS.")
     p.add_argument("--top-k", type=int, default=4,
                    help="Number of documents to retrieve per query.")
