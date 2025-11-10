@@ -18,7 +18,7 @@ LOAD_IN_4BIT = False
 SUPER_EPOCHS = 10
 RANK_LORA = 8
 model_basename = MODEL_NAME.split("/")[-1]
-USE_WANDB = False
+USE_WANDB = True
 FOLDER_TO_SAVE_MODELS = "./models/"
 name_of_folder_model = os.path.join(FOLDER_TO_SAVE_MODELS, f"{model_basename}-r{RANK_LORA}-ccf-squad")
 
@@ -79,11 +79,14 @@ def generate_qa_prompts(dataset, tokenizer):
 def main():
 
     knowledge_dataset = load_from_disk(FOLDER_KNOWLEDGE)
+    # shuffle dataset
+    knowledge_dataset = knowledge_dataset.shuffle(seed=SEED)
     qa_dataset = load_from_disk(FOLDER_QA)
+    qa_dataset = qa_dataset.shuffle(seed=SEED)
     if TINY:
         print("Using tiny dataset for testing...")
-        knowledge_dataset = knowledge_dataset.select(range(128))
-        qa_dataset["train"] = qa_dataset["train"].select(range(128))
+        knowledge_dataset = knowledge_dataset.select(range(512))
+        qa_dataset["train"] = qa_dataset["train"].select(range(512))
         qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
     model, tokenizer = get_model()
     
@@ -122,7 +125,7 @@ def main():
         lr_scheduler_type = "cosine",
         seed = SEED,
         report_to = "none", # Use this for WandB etc
-        output_dir="../models/dummy",
+        output_dir="./models/dummy",
     )
 
     it_config = SFTConfig(
@@ -144,7 +147,7 @@ def main():
         lr_scheduler_type="cosine",
         seed=SEED,
         report_to="none",
-        output_dir="../models/dummy",
+        output_dir="./models/dummy",
         load_best_model_at_end=False,          # <-- opcional
         metric_for_best_model="eval_loss",    # <-- opcional
         greater_is_better=False,              # <-- opcional
@@ -172,6 +175,7 @@ def main():
 
     if USE_WANDB:
         import wandb
+        import json
         wandb.init(
             project="Knowledge-acquisition-squad", 
             name=f"ccf-{model_basename}-r{RANK_LORA}",
@@ -200,6 +204,15 @@ def main():
                 "train_loss_sft": trainer_sft_stats.training_loss,
                 "train_loss_it": trainer_it_stats.training_loss,
             })
+            wandb_info = {
+                "run_name": wandb.run.name,
+                "project": wandb.run.project,
+                "config": dict(wandb.config),
+                "url": wandb.run.url
+            }
+            #save wand info in json in the model folder
+            with open(os.path.join(folder_to_save, "wandb-metadata.json"), "w") as f:
+                json.dump(wandb_info, f)
 
 
 
@@ -208,4 +221,5 @@ if __name__ == "__main__":
     #TODO: pasarlo a hydra
     #TODO: tengo que añadir uno script para evaluar los checkpoints con vllm
     #TODO: AÑADIR LA POSIBILEIDA DE EMPEZAR CON UN CHECKPOINT PREVIO
-    main() 
+    main()
+    
