@@ -2,7 +2,8 @@ from datasets import (
     load_dataset, 
     load_from_disk,
     concatenate_datasets,
-    DatasetDict
+    DatasetDict,
+    Dataset
 )
 import argparse
 import pickle
@@ -164,13 +165,51 @@ def download_parliament():
         os.makedirs(folder_path)
     qa_parliament.save_to_disk(folder_path)
     print(f"Parliament QA dataset saved to {folder_path}")
+
+
+def download_squad():
+    dataset = load_dataset("rajpurkar/squad")
+
+    title = dataset["train"]["title"][:]
+    title += dataset["validation"]["title"][:]
+    context = dataset["train"]["context"][:]
+    context += dataset["validation"]["context"][:]
+
+    dataset_knowledge = {
+        "title": [],
+        "text": []
+    }
+    for t, c in zip(title, context):
+        dataset_knowledge["title"].append(t)
+        dataset_knowledge["text"].append(c)
+
+    dataset_knowledge = Dataset.from_dict(dataset_knowledge)
+
+    unique_texts = set()
+    def is_unique(example):
+        if example["text"] in unique_texts:
+            return False
+        unique_texts.add(example["text"])
+        return True
     
-    
+    dataset_unique = dataset_knowledge.filter(is_unique)
+
+    folder_path = os.path.join(FOLDER_PROCESSED, "squad_knowledge")
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    dataset_unique.save_to_disk(folder_path)
+    print(f"SQuAD knowledge dataset saved to {folder_path}")
+    folder_path = os.path.join(FOLDER_PROCESSED, "squad_qa")
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    dataset.save_to_disk(folder_path)
+    print(f"SQuAD QA dataset saved to {folder_path}")
 
 DATASETS_TO_DOWNLOAD = {
     "ragbench": download_ragbench,
     "clapnq": download_clapnq,
     "parliament": download_parliament,
+    "squad": download_squad,
 }
 
 
