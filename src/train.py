@@ -3,6 +3,8 @@ from unsloth import FastLanguageModel
 from transformers import DataCollatorForLanguageModeling
 from unsloth import UnslothTrainer, UnslothTrainingArguments
 from trl import SFTTrainer, SFTConfig
+import wandb
+import os
 import torch
 
 from utils import SEED
@@ -12,15 +14,20 @@ FOLDER_QA = "data/processed/squad_qa"
 MODEL_NAME = "meta-llama/Llama-3.2-1B-instruct"
 TINY = True
 MAX_LENGTH = 2048
+LOAD_IN_4BIT = False
 SUPER_EPOCHS = 10
 RANK_LORA = 8
+model_basename = MODEL_NAME.split("/")[-1]
+USE_WANDB = False
+FOLDER_TO_SAVE_MODELS = "./models/"
+name_of_folder_model = os.path.join(FOLDER_TO_SAVE_MODELS, f"{model_basename}-r{RANK_LORA}-ccf-squad")
 
 def get_model():
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = MODEL_NAME,
         max_seq_length = MAX_LENGTH,
         full_finetuning = False,
-        load_in_4bit = True,
+        load_in_4bit = LOAD_IN_4BIT,
         load_in_8bit = False,
     )
     if tokenizer.pad_token_id is None:
@@ -115,7 +122,7 @@ def main():
         lr_scheduler_type = "cosine",
         seed = SEED,
         report_to = "none", # Use this for WandB etc
-        output_dir="../models/qwen3-0.6b-rag-indexer",
+        output_dir="../models/dummy",
     )
 
     it_config = SFTConfig(
@@ -137,7 +144,7 @@ def main():
         lr_scheduler_type="cosine",
         seed=SEED,
         report_to="none",
-        output_dir="../models/qwen3-0.6b-rag-retriever",
+        output_dir="../models/dummy",
         load_best_model_at_end=False,          # <-- opcional
         metric_for_best_model="eval_loss",    # <-- opcional
         greater_is_better=False,              # <-- opcional
@@ -160,12 +167,39 @@ def main():
         args=it_config,
     )
 
+    if not os.path.exists(FOLDER_TO_SAVE_MODELS):
+        os.makedirs(FOLDER_TO_SAVE_MODELS)
+
+    if USE_WANDB:
+        import wandb
+        wandb.init(
+            project="Knowledge-acquisition-squad", 
+            name=f"ccf-{model_basename}-r{RANK_LORA}",
+            config={
+                "model_name": MODEL_NAME,
+                "rank_lora": RANK_LORA,
+                "load_in_4bit": LOAD_IN_4BIT,
+                "max_length": MAX_LENGTH,
+                "super_epochs": SUPER_EPOCHS,
+            }
+        )
+
     
     for _ in range(SUPER_EPOCHS):
         print(f"--- SUPER EPOCH {_+1} / {SUPER_EPOCHS} ---")
         trainer_sft_stats = trainer_auto.train() 
         trainer_it_stats = trainer_it.train()
-        # TODO: guardar modelos intermedios si se quiere y wandb logging etc
+        # save adapter
+        folder_to_save = os.path.join(name_of_folder_model, f"super_epoch_{_+1}")
+        if not os.path.exists(folder_to_save):
+            os.makedirs(folder_to_save)
+        model.save_pretrained(os.path.join(folder_to_save))
+        if USE_WANDB:
+            wandb.log({
+                "super_epoch": _ + 1,
+                "train_loss_sft": trainer_sft_stats.training_loss,
+                "train_loss_it": trainer_it_stats.training_loss,
+            })
 
 
 
