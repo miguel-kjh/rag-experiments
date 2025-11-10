@@ -13,11 +13,11 @@ FOLDER_KNOWLEDGE = "data/processed/squad_knowledge"
 FOLDER_QA = "data/processed/squad_qa"
 MODEL_NAME = "meta-llama/Llama-3.2-1B-instruct"
 TINY = False
-BATCH_SIZE = 16
+BATCH_SIZE = 8
 MAX_LENGTH = 2048
 LOAD_IN_4BIT = False
 SUPER_EPOCHS = 10
-RANK_LORA = 16
+RANK_LORA = 128
 model_basename = MODEL_NAME.split("/")[-1]
 USE_WANDB = True
 FOLDER_TO_SAVE_MODELS = "./models/"
@@ -87,8 +87,11 @@ def main():
     if TINY:
         print("Using tiny dataset for testing...")
         knowledge_dataset = knowledge_dataset.select(range(512))
-    qa_dataset["train"] = qa_dataset["train"].select(range(1000))
-    qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
+        qa_dataset["train"] = qa_dataset["train"].select(range(128))
+        qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
+    else:
+        qa_dataset["train"] = qa_dataset["train"].select(range(1000))
+        qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
     model, tokenizer = get_model()
     
     # datasets
@@ -194,11 +197,13 @@ def main():
         print(f"--- SUPER EPOCH {_+1} / {SUPER_EPOCHS} ---")
         trainer_sft_stats = trainer_auto.train() 
         trainer_it_stats = trainer_it.train()
+        print(f"Super epoch {_+1} completed.")
         # save adapter
         folder_to_save = os.path.join(name_of_folder_model, f"super_epoch_{_+1}")
         if not os.path.exists(folder_to_save):
             os.makedirs(folder_to_save)
-        model.save_pretrained(os.path.join(folder_to_save))
+        model.save_pretrained(os.path.join(folder_to_save), safe_serialization=True, max_shard_size="200MB")
+        print(f"Model saved to {folder_to_save}")
         if USE_WANDB:
             wandb.log({
                 "super_epoch": _ + 1,
@@ -214,6 +219,7 @@ def main():
             #save wand info in json in the model folder
             with open(os.path.join(folder_to_save, "wandb-metadata.json"), "w") as f:
                 json.dump(wandb_info, f)
+            print(f"WandB info saved")
 
 
 
