@@ -12,11 +12,12 @@ from utils import SEED
 FOLDER_KNOWLEDGE = "data/processed/squad_knowledge"
 FOLDER_QA = "data/processed/squad_qa"
 MODEL_NAME = "meta-llama/Llama-3.2-1B-instruct"
-TINY = True
+TINY = False
+BATCH_SIZE = 16
 MAX_LENGTH = 2048
 LOAD_IN_4BIT = False
 SUPER_EPOCHS = 10
-RANK_LORA = 8
+RANK_LORA = 16
 model_basename = MODEL_NAME.split("/")[-1]
 USE_WANDB = True
 FOLDER_TO_SAVE_MODELS = "./models/"
@@ -86,8 +87,8 @@ def main():
     if TINY:
         print("Using tiny dataset for testing...")
         knowledge_dataset = knowledge_dataset.select(range(512))
-        qa_dataset["train"] = qa_dataset["train"].select(range(512))
-        qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
+    qa_dataset["train"] = qa_dataset["train"].select(range(1000))
+    qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
     model, tokenizer = get_model()
     
     # datasets
@@ -110,8 +111,8 @@ def main():
     # training
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     auto_config = UnslothTrainingArguments(
-        per_device_train_batch_size = 8, # TODO: leer la info de unsloth para saber poner esto bien
-        gradient_accumulation_steps = 8, # Use GA to mimic batch size!
+        per_device_train_batch_size = BATCH_SIZE,
+        gradient_accumulation_steps = BATCH_SIZE, # Use GA to mimic batch size!
         save_strategy="no",
         save_total_limit=0,
         warmup_steps = 5,
@@ -130,9 +131,9 @@ def main():
 
     it_config = SFTConfig(
         dataset_text_field="text",
-        per_device_train_batch_size=8,
-        per_device_eval_batch_size=8,        # <-- añade eval batch size
-        gradient_accumulation_steps=8,
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,        # <-- añade eval batch size
+        gradient_accumulation_steps=BATCH_SIZE,
         warmup_steps=25,
         save_strategy="no",
         save_total_limit=0,
