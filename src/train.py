@@ -100,7 +100,7 @@ def main():
     # training
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     auto_config = UnslothTrainingArguments(
-        per_device_train_batch_size = 8,
+        per_device_train_batch_size = 8, # TODO: leer la info de unsloth para saber poner esto bien
         gradient_accumulation_steps = 8, # Use GA to mimic batch size!
         save_strategy="no",
         save_total_limit=0,
@@ -171,4 +171,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    #TODO: pasarlo a hydra
+    #TODO: tengo que añadir uno script para evaluar los checkpoints con vllm
+    #TODO: AÑADIR LA POSIBILEIDA DE EMPEZAR CON UN CHECKPOINT PREVIO
+    main() 
