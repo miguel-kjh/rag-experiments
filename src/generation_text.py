@@ -80,6 +80,7 @@ def build_prompt(tokenizer, question: str) -> str:
     return tokenizer.apply_chat_template(
         messages,
         add_generation_prompt=True,
+        enable_thinking=False,
         tokenize=False,
     )
 
@@ -234,8 +235,8 @@ def main():
             records.append({
                 "user_input": batch_user_input[i],
                 "context": batch_contexts[i],
-                "response": batch_texts[i],      # None in retrieval-only
-                "reference": batch_reference[i]["text"][0],  # first reference answer
+                "response": batch_texts[i].lower(),
+                "reference": batch_reference[i]["text"][0].lower(),  # first reference answer
             })
 
     # Evaluation (Generation)
