@@ -202,7 +202,7 @@ def main():
         folder_to_save = os.path.join(name_of_folder_model, f"super_epoch_{_+1}")
         if not os.path.exists(folder_to_save):
             os.makedirs(folder_to_save)
-        model.save_pretrained(os.path.join(folder_to_save), safe_serialization=True, max_shard_size="200MB")
+        model.save_lora(folder_to_save)
         print(f"Model saved to {folder_to_save}")
         if USE_WANDB:
             wandb.log({

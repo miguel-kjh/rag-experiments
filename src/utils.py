@@ -15,8 +15,11 @@ RAGBENCH_SUBSETS = [
 
 SEED             = 123
 
-SYSTEM_PROMPT     = "You are a helpful AI assistant. Use the provided context to answer questions."
-PROMPT            = """Answer the question based only on the following context:
+SYSTEM_PROMPT_RAG = "You are a helpful AI assistant. Use the provided context to answer questions."
+SYSTEM_PROMPT_KNOWLEDGE = """
+You are an expert at answering questions. Given the question, provide a concise and accurate answer based on your knowledge.
+"""
+PROMPT = """Answer the question based only on the following context:
 Context: {context}
 
 Question: {question}

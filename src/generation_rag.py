@@ -6,7 +6,6 @@ from tqdm import tqdm
 import re
 from unsloth import FastLanguageModel
 from vllm import SamplingParams
-from rafa import Rafa
 from datetime import datetime, timezone
 from typing import Tuple, List, Optional
 
@@ -22,7 +21,7 @@ from embeddings_models import SentenceTransformerEmbeddings
 from utils import setup_environment
 from utils import (
     SEED as DEFAULT_SEED,
-    SYSTEM_PROMPT,
+    SYSTEM_PROMPT_RAG,
     PROMPT,
     seed_everything,
 )
@@ -41,12 +40,7 @@ def retrieve_documents(query: str, retriever: Retriever, reranker: Reranker) -> 
 
     if reranker:
         results = reranker.rerank(query, results)
-        if type(reranker) is Rafa:
-            # Rafa returns (doc, score, reasoning)
-            results = [doc for doc, score, reasoning in results]
-        else:
-            # Other rerankers return (doc, score)
-            results = [doc for doc, score in results]
+        results = [doc for doc, score in results]
     
     list_contents = [doc.page_content for doc in results]
     context = "\n".join(list_contents)
@@ -92,7 +86,7 @@ def retrival_documents_query_expansion(
 def build_prompt(tokenizer, question: str, context: str) -> str:
     """Builds the chat prompt for a single example using the tokenizer chat template."""
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT_RAG},
         {"role": "user",   "content": PROMPT.format(context=context, question=question)},
     ]
     return tokenizer.apply_chat_template(
