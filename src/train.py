@@ -84,14 +84,13 @@ def main():
     knowledge_dataset = knowledge_dataset.shuffle(seed=SEED)
     qa_dataset = load_from_disk(FOLDER_QA)
     qa_dataset = qa_dataset.shuffle(seed=SEED)
+    
     if TINY:
         print("Using tiny dataset for testing...")
         knowledge_dataset = knowledge_dataset.select(range(512))
         qa_dataset["train"] = qa_dataset["train"].select(range(128))
         qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
-    else:
-        qa_dataset["train"] = qa_dataset["train"].select(range(1000))
-        qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
+
     model, tokenizer = get_model()
     
     # datasets
@@ -134,13 +133,13 @@ def main():
 
     it_config = SFTConfig(
         dataset_text_field="text",
-        per_device_train_batch_size=BATCH_SIZE,
-        per_device_eval_batch_size=BATCH_SIZE,        # <-- añade eval batch size
+        per_device_train_batch_size=BATCH_SIZE*2,
+        per_device_eval_batch_size=BATCH_SIZE*2,        # <-- añade eval batch size
         gradient_accumulation_steps=BATCH_SIZE,
         warmup_steps=25,
         save_strategy="no",
         save_total_limit=0,
-        eval_steps=1,
+        eval_steps=15,
         eval_strategy="steps",         # <-- activa evaluación periódica
         num_train_epochs=1,             # <-- opcional: usa epochs en lugar de max_steps
         #max_steps=30,

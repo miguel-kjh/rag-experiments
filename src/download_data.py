@@ -13,6 +13,7 @@ from utils import (
     FOLDER_RAW,
     FOLDER_PROCESSED,
     RAGBENCH_SUBSETS,
+    SEED,
 )
 
 def download_dataset(dataset_name, split=None):
@@ -170,10 +171,8 @@ def download_parliament():
 def download_squad():
     dataset = load_dataset("rajpurkar/squad")
 
-    title = dataset["train"]["title"][:]
-    title += dataset["validation"]["title"][:]
-    context = dataset["train"]["context"][:]
-    context += dataset["validation"]["context"][:]
+    title = dataset["validation"]["title"][:]
+    context = dataset["validation"]["context"][:]  
 
     dataset_knowledge = {
         "title": [],
@@ -199,10 +198,26 @@ def download_squad():
         os.makedirs(folder_path)
     dataset_unique.save_to_disk(folder_path)
     print(f"SQuAD knowledge dataset saved to {folder_path}")
+
+    #split validation dataset into train, val, test (80%, 10%, 10%) create new dataset
+    dataset_size = len(dataset["validation"])
+    train_size = int(0.8 * dataset_size)
+    val_size = int(0.1 * dataset_size)
+    dataset_ = dataset["validation"].shuffle(seed=SEED)
+    train_dataset = dataset_.select(range(0, train_size))
+    val_dataset = dataset_.select(range(train_size, train_size + val_size))
+    test_dataset = dataset_.select(range(train_size + val_size, dataset_size))
+
+    new_dataset = DatasetDict({
+        "train": train_dataset,
+        "validation": val_dataset,
+        "test": test_dataset
+    })
+
     folder_path = os.path.join(FOLDER_PROCESSED, "squad_qa")
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-    dataset.save_to_disk(folder_path)
+    new_dataset.save_to_disk(folder_path)
     print(f"SQuAD QA dataset saved to {folder_path}")
 
 DATASETS_TO_DOWNLOAD = {
