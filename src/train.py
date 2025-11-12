@@ -87,7 +87,7 @@ def main():
     
     if TINY:
         print("Using tiny dataset for testing...")
-        knowledge_dataset = knowledge_dataset.select(range(512))
+        knowledge_dataset = knowledge_dataset.select(range(128))
         qa_dataset["train"] = qa_dataset["train"].select(range(128))
         qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
 
@@ -201,7 +201,7 @@ def main():
         folder_to_save = os.path.join(name_of_folder_model, f"super_epoch_{_+1}")
         if not os.path.exists(folder_to_save):
             os.makedirs(folder_to_save)
-        model.save_lora(folder_to_save)
+        model.save_pretrained(folder_to_save)
         print(f"Model saved to {folder_to_save}")
         if USE_WANDB:
             wandb.log({
