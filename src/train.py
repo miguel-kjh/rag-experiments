@@ -9,20 +9,21 @@ import torch
 
 from utils import SEED
 
-FOLDER_KNOWLEDGE = "data/processed/squad_knowledge"
-FOLDER_QA = "data/processed/squad_qa"
+FOLDER_KNOWLEDGE = "data/processed/squad_knowledge_european_union_law"
+FOLDER_QA = "data/processed/squad_qa_european_union_law"
 MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 is_adapter = False # TODO: solucionar esto no funciona
 TINY = False
-BATCH_SIZE = 8
+BATCH_SIZE = 2
 MAX_LENGTH = 2048
 LOAD_IN_4BIT = False
-SUPER_EPOCHS = 20
+SUPER_EPOCHS = 40
 RANK_LORA = 128
 model_basename = MODEL_NAME.split("/")[-1]
 USE_WANDB = True
 FOLDER_TO_SAVE_MODELS = "./models/"
-name_of_folder_model = os.path.join(FOLDER_TO_SAVE_MODELS, f"{model_basename}-r{RANK_LORA}-ccf-squad")
+name_dataset = FOLDER_QA.split("/")[-1]
+name_of_folder_model = os.path.join(FOLDER_TO_SAVE_MODELS, f"{model_basename}-r{RANK_LORA}-ccf-{name_dataset}")
 
 def get_model():
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -210,8 +211,8 @@ def main():
     for super_epoch in range(SUPER_EPOCHS):
         if is_adapter: super_epoch += last_super_epoch
         print(f"--- SUPER EPOCH {super_epoch+1} / {SUPER_EPOCHS} ---")
-        trainer_sft_stats = trainer_auto.train(resume_from_checkpoint = is_adapter) 
-        trainer_it_stats = trainer_it.train(resume_from_checkpoint = is_adapter)
+        trainer_sft_stats = trainer_auto.train() 
+        trainer_it_stats = trainer_it.train()
         print(f"Super epoch {super_epoch+1} completed.")
         # save adapter
         folder_to_save = os.path.join(name_of_folder_model, f"super_epoch_{super_epoch+1}")

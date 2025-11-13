@@ -169,16 +169,16 @@ def download_parliament():
 
 
 def download_squad():
-    dataset = load_dataset("rajpurkar/squad")
+    dataset_squad = load_dataset("rajpurkar/squad")
 
-    title = dataset["validation"]["title"][:]
-    context = dataset["validation"]["context"][:]  
+    titles = dataset_squad["validation"]["title"][:]
+    context = dataset_squad["validation"]["context"][:]  
 
     dataset_knowledge = {
         "title": [],
         "text": []
     }
-    for t, c in zip(title, context):
+    for t, c in zip(titles, context):
         dataset_knowledge["title"].append(t)
         dataset_knowledge["text"].append(c)
 
@@ -200,10 +200,10 @@ def download_squad():
     print(f"SQuAD knowledge dataset saved to {folder_path}")
 
     #split validation dataset into train, val, test (80%, 10%, 10%) create new dataset
-    dataset_size = len(dataset["validation"])
+    dataset_size = len(dataset_squad["validation"])
     train_size = int(0.8 * dataset_size)
     val_size = int(0.1 * dataset_size)
-    dataset_ = dataset["validation"].shuffle(seed=SEED)
+    dataset_ = dataset_squad["validation"].shuffle(seed=SEED)
     train_dataset = dataset_.select(range(0, train_size))
     val_dataset = dataset_.select(range(train_size, train_size + val_size))
     test_dataset = dataset_.select(range(train_size + val_size, dataset_size))
@@ -219,6 +219,32 @@ def download_squad():
         os.makedirs(folder_path)
     new_dataset.save_to_disk(folder_path)
     print(f"SQuAD QA dataset saved to {folder_path}")
+
+    # Dividir por dominios (titles) y mostrar número de ejemplos por dominio vamos a usar solo el European_Union_law
+    domain = "European_Union_law"
+    sud_domain_qa = dataset_squad['validation'].filter(lambda x: x['title'] == domain)
+    train_test_split = sud_domain_qa.train_test_split(test_size=0.1) #test 10%, train 90%
+    train_val_split = train_test_split['train'].train_test_split(test_size=0.1) #val 10%, train 90%
+    train_dataset = train_val_split['train']
+    val_dataset = train_val_split['test']
+    test_dataset = train_test_split['test']
+    sub_dataset_domain = DatasetDict({
+        "train": train_dataset,
+        "validation": val_dataset,
+        "test": test_dataset
+    })
+    sud_domain_knowledge = dataset_unique.filter(lambda x: x['title'] == domain)
+    # save sud_domain_qa and sud_domain_knowledge
+    folder_path_qa = os.path.join(FOLDER_PROCESSED, f"squad_qa_{domain.lower()}")
+    if not os.path.exists(folder_path_qa):
+        os.makedirs(folder_path_qa)
+    sub_dataset_domain.save_to_disk(folder_path_qa)
+    print(f"SQuAD QA dataset for domain {domain} saved to {folder_path_qa}")
+    folder_path_knowledge = os.path.join(FOLDER_PROCESSED, f"squad_knowledge_{domain.lower()}")
+    if not os.path.exists(folder_path_knowledge):
+        os.makedirs(folder_path_knowledge)
+    sud_domain_knowledge.save_to_disk(folder_path_knowledge)
+    print(f"SQuAD knowledge dataset for domain {domain} saved to {folder_path_knowledge}")
 
 DATASETS_TO_DOWNLOAD = {
     "ragbench": download_ragbench,
