@@ -11,12 +11,13 @@ from utils import SEED
 
 FOLDER_KNOWLEDGE = "data/processed/squad_knowledge"
 FOLDER_QA = "data/processed/squad_qa"
-MODEL_NAME = "meta-llama/Llama-3.2-1B-instruct"
+MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
+is_adapter = False # TODO: solucionar esto no funciona
 TINY = False
 BATCH_SIZE = 8
 MAX_LENGTH = 2048
 LOAD_IN_4BIT = False
-SUPER_EPOCHS = 10
+SUPER_EPOCHS = 20
 RANK_LORA = 128
 model_basename = MODEL_NAME.split("/")[-1]
 USE_WANDB = True
@@ -34,19 +35,22 @@ def get_model():
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
         model.config.pad_token_id = tokenizer.eos_token_id
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r = RANK_LORA,
-        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
-                        "gate_proj", "up_proj", "down_proj",],
-        lora_alpha = RANK_LORA*2,
-        lora_dropout = 0, 
-        bias = "none",
-        use_gradient_checkpointing = "unsloth",
-        random_state = SEED,
-        use_rslora = False,
-        loftq_config = None,
-    )
+    if not is_adapter:
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r = RANK_LORA,
+            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
+                            "gate_proj", "up_proj", "down_proj",],
+            lora_alpha = RANK_LORA*2,
+            lora_dropout = 0, 
+            bias = "none",
+            use_gradient_checkpointing = "unsloth",
+            random_state = SEED,
+            use_rslora = False,
+            loftq_config = None,
+        )
+    else:
+        print("The model is loaded with adapters.")
     model.print_trainable_parameters()
     return model, tokenizer
 
@@ -92,6 +96,17 @@ def main():
         qa_dataset["validation"] = qa_dataset["validation"].select(range(64))
 
     model, tokenizer = get_model()
+
+    if is_adapter:
+        import json
+        adapter_config_path = os.path.join(MODEL_NAME, "wandb-metadata.json")
+        if os.path.exists(adapter_config_path):
+            with open(adapter_config_path, "r") as f:
+                adapter_config = json.load(f)
+            last_super_epoch = int(adapter_config["config"]["super_epochs"])
+            print(f"Loaded adapter train from super epoch {last_super_epoch}")
+        else:
+            raise FileNotFoundError(f"Adapter config not found at {adapter_config_path}")
     
     # datasets
     qa_dataset_train_text = generate_qa_prompts(qa_dataset["train"], tokenizer)
@@ -192,20 +207,21 @@ def main():
         )
 
     
-    for _ in range(SUPER_EPOCHS):
-        print(f"--- SUPER EPOCH {_+1} / {SUPER_EPOCHS} ---")
-        trainer_sft_stats = trainer_auto.train() 
-        trainer_it_stats = trainer_it.train()
-        print(f"Super epoch {_+1} completed.")
+    for super_epoch in range(SUPER_EPOCHS):
+        if is_adapter: super_epoch += last_super_epoch
+        print(f"--- SUPER EPOCH {super_epoch+1} / {SUPER_EPOCHS} ---")
+        trainer_sft_stats = trainer_auto.train(resume_from_checkpoint = is_adapter) 
+        trainer_it_stats = trainer_it.train(resume_from_checkpoint = is_adapter)
+        print(f"Super epoch {super_epoch+1} completed.")
         # save adapter
-        folder_to_save = os.path.join(name_of_folder_model, f"super_epoch_{_+1}")
+        folder_to_save = os.path.join(name_of_folder_model, f"super_epoch_{super_epoch+1}")
         if not os.path.exists(folder_to_save):
             os.makedirs(folder_to_save)
         model.save_pretrained(folder_to_save)
         print(f"Model saved to {folder_to_save}")
         if USE_WANDB:
             wandb.log({
-                "super_epoch": _ + 1,
+                "super_epoch": super_epoch + 1,
                 "train_loss_sft": trainer_sft_stats.training_loss,
                 "train_loss_it": trainer_it_stats.training_loss,
             })
