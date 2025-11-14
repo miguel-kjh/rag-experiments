@@ -1,4 +1,5 @@
 from datasets import load_from_disk, Dataset
+from tqdm import tqdm
 from unsloth import FastLanguageModel
 from transformers import DataCollatorForLanguageModeling
 from unsloth import UnslothTrainer, UnslothTrainingArguments
@@ -11,13 +12,13 @@ from utils import SEED
 
 FOLDER_KNOWLEDGE = "data/processed/squad_knowledge_european_union_law"
 FOLDER_QA = "data/processed/squad_qa_european_union_law"
-MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
+MODEL_NAME = "openai-community/gpt2"
 is_adapter = False # TODO: solucionar esto no funciona
 TINY = False
 BATCH_SIZE = 2
 MAX_LENGTH = 2048
 LOAD_IN_4BIT = False
-SUPER_EPOCHS = 40
+SUPER_EPOCHS = 100
 RANK_LORA = 128
 model_basename = MODEL_NAME.split("/")[-1]
 USE_WANDB = True
@@ -82,6 +83,31 @@ def generate_qa_prompts(dataset, tokenizer):
         prompts.append(build_prompt_it(tokenizer, system_prompt, prompt, response.format(response=item["answers"]["text"][0])))
     return prompts
 
+def generate_qa_prompts_for_testing(dataset, tokenizer):
+
+    def build_prompt_testing(tokenizer, system_prompt: str, prompt: str) -> str:
+        """Builds the chat prompt for a single example using the tokenizer chat template."""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": prompt},
+        ]
+        return tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+    
+    system_prompt = """
+    You are an expert at answering questions. Given the question, provide a concise and accurate answer based on your knowledge.
+    """
+    prompts = []
+    for item in dataset:
+        prompt = """{QUERY}"""
+        question = item["question"] 
+        prompt = prompt.format(QUERY=question)
+        prompts.append(build_prompt_testing(tokenizer, system_prompt, prompt))
+    return prompts
+
 def main():
 
     knowledge_dataset = load_from_disk(FOLDER_KNOWLEDGE)
@@ -112,19 +138,24 @@ def main():
     # datasets
     qa_dataset_train_text = generate_qa_prompts(qa_dataset["train"], tokenizer)
     qa_dataset_validation_text = generate_qa_prompts(qa_dataset["validation"], tokenizer)
+    qa_dataset_test_text = generate_qa_prompts_for_testing(qa_dataset["test"], tokenizer)
+
     def tokenize_function(examples):
         return tokenizer(examples['text'], padding='max_length', truncation=True, max_length=MAX_LENGTH)
     
     qa_train_dataset = Dataset.from_dict({"text": qa_dataset_train_text})
     qa_val_dataset = Dataset.from_dict({"text": qa_dataset_validation_text})
+    qa_test_dataset = Dataset.from_dict({"text": qa_dataset_test_text})
 
     qa_dataset = {
         "train": qa_train_dataset,
         "validation": qa_val_dataset,
+        "test": qa_test_dataset,
     }
     knowledge_dataset_tokenizer = knowledge_dataset.map(tokenize_function, batched=True)
     qa_train_dataset_tokenizer = qa_dataset["train"].map(tokenize_function, batched=True)
     qa_val_dataset_tokenizer = qa_dataset["validation"].map(tokenize_function, batched=True)
+    qa_test_dataset_tokenizer = qa_dataset["test"].map(tokenize_function, batched=True)
     
     # training
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)

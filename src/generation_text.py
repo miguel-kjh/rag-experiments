@@ -41,9 +41,11 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Load the model in 4-bit mode.")
     p.add_argument("--load-in-8bit", action="store_true", default=False,
                    help="Load the model in 8-bit mode.")
+    p.add_argument("--use-wandb", action="store_true", default=False,
+                   help="Enable Weights & Biases logging.")
 
     # Data
-    p.add_argument("--dataset", default="data/processed/squad_qa_european_union_law",
+    p.add_argument("--dataset", default="data/processed/squad_qa",
                    help="Path to the dataset (datasets.load_from_disk).")
     
     # Batch / sampling
@@ -121,6 +123,23 @@ def main():
 
     seed_everything(args.seed)
     setup_environment()
+
+    if args.use_wandb:
+        import wandb
+        
+        adapter_config_path = os.path.join(args.model, "wandb-metadata.json")
+        if os.path.exists(adapter_config_path):
+            with open(adapter_config_path, "r") as f:
+                adapter_config = json.load(f)
+            project_name = adapter_config["project"]
+            run_name = adapter_config["run_name"]
+        else:
+            raise FileNotFoundError(f"Adapter config not found at {adapter_config_path}")
+        
+        wandb.init(
+            project=project_name,
+            name=run_name,
+        )
 
     evaluator = EvaluatorKnowledgeUsingAccuracy()
 
@@ -248,6 +267,10 @@ def main():
         json.dump(results, f, ensure_ascii=False, indent=2)
     df_results.to_csv(os.path.join(folder_output, "generation_results.csv"), index=False)
     print("Saved results.")
+
+    if args.use_wandb:
+        wandb.log(results)
+        wandb.finish()
 
 if __name__ == "__main__":
     main()
