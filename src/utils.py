@@ -13,7 +13,7 @@ RAGBENCH_SUBSETS = [
     'covidqa', 'cuad', 'delucionqa', 'emanual', 'expertqa', 'finqa', 'hagrid', 'hotpotqa', 'msmarco', 'pubmedqa', 'tatqa', 'techqa'
 ]
 
-SEED             = 123
+SEED = 123
 
 SYSTEM_PROMPT_RAG = "You are a helpful AI assistant. Use the provided context to answer questions."
 SYSTEM_PROMPT_KNOWLEDGE = """
@@ -25,6 +25,69 @@ Context: {context}
 Question: {question}
 
 Answer:"""
+
+SYSTEM_PROMPT_FOR_GENERATE_ENTITIES = """
+As a knowledge analyzer, your task is to dissect and understand an article provided by the user. You are required to perform the following steps:
+1. Summarize the Article: Provide a concise summary of the entire article, capturing the main points and themes.
+2. Extract Entities: Identify and list all significant "nouns" or entities mentioned within the article. These entities should include but not limited to:
+    * People: Any individuals mentioned in the article, using the names or references provided.
+    * Places: Both specific locations and abstract spaces relevant to the content.
+    * Object: Any concrete object that is referenced by the provided content.
+    * Concepts: Any significant abstract ideas or themes that are central to the article's discussion.
+
+Try to exhaust as many entities as possible. Your response should be structured in a JSON format to organize the information effectively. Ensure that the summary is brief yet comprehensive, and the list of entities is detailed and accurate.
+
+Here is the format you should use for your response:
+
+{
+  "summary":  "<A concise summary of the article>",
+  "entities": ["entity1", "entity2", ...]
+}
+"""
+
+SYSTEM_PROMPT_GENERATE_TWO_ENTITY_RELATIONS = """
+You will act as a knowledge analyzer tasked with dissecting an article provided by the user. Your role involves two main objectives:
+1. Rephrasing Content: The user will identify two specific entities mentioned in the article. You are required to rephrase the content of the article twice:
+    * Once, emphasizing the first entity.
+    * Again, emphasizing the second entity.
+2. Analyzing Interactions: Discuss how the two specified entities interact within the context of the article.
+
+Your responses should provide clear segregation between the rephrased content and the interaction analysis. Ensure each section of the output include sufficient context, ideally referencing the article's title to maintain clarity about the discussion's focus.
+Here is the format you should follow for your response:
+
+### Discussion of <title> in relation to <entity1>
+<Rephrased content focusing on the first entity>
+
+### Discussion of <title> in relation to <entity2>
+<Rephrased content focusing on the second entity>
+
+### Discussion of Interaction between <entity1> and <entity2> in context of <title>
+<Discussion on how the two entities interact within the article>
+"""
+
+SYSTEM_PROMPT_GENERATE_THREE_ENTITY_RELATIONS = """
+You will act as a knowledge analyzer tasked with dissecting an article provided by the user. Your role involves three main objectives:
+1. Rephrasing Content: The user will identify three specific entities mentioned in the article. You are required to rephrase the content of the article three times:
+    * Once, emphasizing the first entity.
+    * Again, emphasizing the second entity.
+    * Lastly, emphasizing the third entity.
+2. Analyzing Interactions: Discuss how these three specified entities interact within the context of the article.
+
+Your responses should provide clear segregation between the rephrased content and the interaction analysis. Ensure each section of the output include sufficient context, ideally referencing the article's title to maintain clarity about the discussion's focus.
+Here is the format you should follow for your response:
+
+### Discussion of <title> in relation to <entity1>
+<Rephrased content focusing on the first entity>
+
+### Discussion of <title> in relation to <entity2>
+<Rephrased content focusing on the second entity>
+
+### Discussion of <title> in relation to <entity3>
+<Rephrased content focusing on the third entity>
+
+### Discussion of Interaction between <entity1>, <entity2> and <entity3> in context of <title>
+<Discussion on how the three entities interact within the article>
+"""
 
 def seed_everything(seed):
     """Set seed for reproducibility."""

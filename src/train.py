@@ -12,7 +12,8 @@ from utils import SEED
 
 FOLDER_KNOWLEDGE = "data/processed/squad_knowledge_european_union_law"
 FOLDER_QA = "data/processed/squad_qa_european_union_law"
-MODEL_NAME = "openai-community/gpt2"
+MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
+is_sync = True
 is_adapter = False # TODO: solucionar esto no funciona
 TINY = False
 BATCH_SIZE = 2
@@ -110,7 +111,20 @@ def generate_qa_prompts_for_testing(dataset, tokenizer):
 
 def main():
 
-    knowledge_dataset = load_from_disk(FOLDER_KNOWLEDGE)
+    if is_sync:
+        import json
+        folder_knowledge_sync = os.path.join(FOLDER_KNOWLEDGE, "test.jsonl")
+
+        records = []
+        with open(folder_knowledge_sync, "r") as f:
+            for line in f:
+                if line.strip():  # por si hay líneas vacías
+                    records.append(json.loads(line))
+
+        knowledge_dataset_all = Dataset.from_list(records)
+        knowledge_dataset = knowledge_dataset_all.filter(lambda x: x["synthetic_type"] != "entities_summary")
+    else:
+        knowledge_dataset = load_from_disk(FOLDER_KNOWLEDGE)
     # shuffle dataset
     knowledge_dataset = knowledge_dataset.shuffle(seed=SEED)
     qa_dataset = load_from_disk(FOLDER_QA)

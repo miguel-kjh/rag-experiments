@@ -45,7 +45,7 @@ def get_parser() -> argparse.ArgumentParser:
                    help="Enable Weights & Biases logging.")
 
     # Data
-    p.add_argument("--dataset", default="data/processed/squad_qa",
+    p.add_argument("--dataset", default="data/processed/squad_qa_european_union_law",
                    help="Path to the dataset (datasets.load_from_disk).")
     
     # Batch / sampling
