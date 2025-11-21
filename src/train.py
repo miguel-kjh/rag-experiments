@@ -174,8 +174,8 @@ def main():
     # training
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     auto_config = UnslothTrainingArguments(
-        per_device_train_batch_size = BATCH_SIZE,
-        gradient_accumulation_steps = BATCH_SIZE, # Use GA to mimic batch size!
+        per_device_train_batch_size = 16,
+        gradient_accumulation_steps = 16, # Use GA to mimic batch size!
         save_strategy="no",
         save_total_limit=0,
         warmup_steps = 5,
