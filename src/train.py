@@ -19,7 +19,7 @@ TINY = False
 BATCH_SIZE = 2
 MAX_LENGTH = 2048
 LOAD_IN_4BIT = False
-SUPER_EPOCHS = 100
+SUPER_EPOCHS = 10
 RANK_LORA = 128
 model_basename = MODEL_NAME.split("/")[-1]
 USE_WANDB = True
@@ -174,8 +174,8 @@ def main():
     # training
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     auto_config = UnslothTrainingArguments(
-        per_device_train_batch_size = 16,
-        gradient_accumulation_steps = 16, # Use GA to mimic batch size!
+        per_device_train_batch_size = 2,
+        gradient_accumulation_steps = 2, # Use GA to mimic batch size!
         save_strategy="no",
         save_total_limit=0,
         warmup_steps = 5,
@@ -194,9 +194,9 @@ def main():
 
     it_config = SFTConfig(
         dataset_text_field="text",
-        per_device_train_batch_size=BATCH_SIZE*2,
-        per_device_eval_batch_size=BATCH_SIZE*2,        # <-- añade eval batch size
-        gradient_accumulation_steps=BATCH_SIZE,
+        per_device_train_batch_size=2,
+        per_device_eval_batch_size=4,        # <-- añade eval batch size
+        gradient_accumulation_steps=2,
         warmup_steps=25,
         save_strategy="no",
         save_total_limit=0,
